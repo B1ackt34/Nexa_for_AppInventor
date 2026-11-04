@@ -1,6 +1,6 @@
-# NexaPackagingProbe 0.0.1 — prototipo sperimentale
+# NexaPackagingProbe 0.0.2 — prototipo sperimentale
 
-Scarica **NexaPackagingProbe-0.0.1.aix** in questa cartella usando il pulsante
+Scarica **NexaPackagingProbe-0.0.2.aix** in questa cartella usando il pulsante
 Download del file o il collegamento Raw.
 
 Il file è distribuito in un ramo dedicato perché le API GitHub Releases non sono
@@ -26,3 +26,16 @@ l'inizializzazione nativa, non il funzionamento del wallet.
 
 Sorgenti e istruzioni: ../packaging-probe/README.md.
 Integrità del download: SHA256SUMS.
+
+
+## Variante 0.0.2 per server con limite di 5 MiB
+
+La 0.0.1 è conservata solo come riferimento. La 0.0.2 mantiene ogni file interno
+sotto 5 MiB. Classi, DEX e file nativi sono invariati; i JAR suddivisi sono
+registrati nei metadata delle librerie App Inventor. Il contenitore completo
+resta circa 14 MB: il limite qui affrontato è quello dei singoli file interni.
+
+MIT ha corretto il limite da 5 a 15 MiB nel commit
+b097193903890d6aa729ac52464ae342d3a600e2. Non è verificato se il servizio ai2a
+abbia quella correzione. L'errore di importazione null è compatibile con questa
+causa, ma non la dimostra. La nuova importazione richiede ancora una prova utente.

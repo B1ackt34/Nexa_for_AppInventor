@@ -291,3 +291,31 @@ Il provider automatico dipende dal manifest APK: un errore prima dell'avvio
 richiede log Android e potrebbe non arrivare all'evento InitializationFailed.
 Il limite Companion/AAR documentato da Rush resta valido. Le cinque funzioni
 wallet non sono ancora implementate. Nessuna pubblicazione o modifica bozza.
+
+
+## Importazione MIT fallita e variante 0.0.2 (2026-11-04)
+
+L'utente ha osservato "Import Extension Failed! null" su ai2a. L'importazione
+non è quindi verificata nonostante la build riuscita. ZIP e JSON della 0.0.1
+sono stati letti con Java ZipInputStream e la libreria org.json dei sorgenti MIT:
+nessun errore di parsing. Non disponibili log del servizio o conferma sul metodo
+file/URL e integrità del file locale dell'utente.
+
+Individuata correzione ufficiale MIT
+b097193903890d6aa729ac52464ae342d3a600e2 in PostgreSQLStorageIo.getMaxJobSizeBytes:
+il limite precedente di 5 MiB viene elevato a 15 MiB. La 0.0.1 supera 5 MiB in
+due file interni. La versione del servizio live non è nota: questa è una causa
+plausibile, non una diagnosi confermata dai log.
+
+Creata variante 0.0.2 con tutti i file interni sotto 5 MiB. tools/compat_aix.py
+suddivide AndroidRuntime.jar, registra i nuovi JAR e separa classes.jar dall'AAR
+Nexa mantenendo i file JNI e manifest. Verifica identità dei payload originali:
+nessuna classe, istruzione DEX o libreria nativa è eliminata o modificata.
+Il codice Nexa non è cambiato e non sono introdotte nuove API.
+
+Prove superate: archivio/descrittori/JNI, Java ZipInputStream e org.json MIT,
+conversione D8 dell'intero grafo di JAR ripacchettizzato (exit 0, log vuoto).
+Dimensione AIX 13.709.487 byte; massimo file interno 3.276.061 byte.
+SHA256 a0d3b6e3d2a121eed8fc16d5e92ca594a8dcdc3fe1b143fdb03dddb4cf637d98.
+Importazione live e APK restano da provare. La variante viene distribuita nel
+ramo dedicato già autorizzato, mantenendo l'originale per confronto.

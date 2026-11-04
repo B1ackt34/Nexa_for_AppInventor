@@ -34,10 +34,20 @@ def inspect(path):
             assert "org.nexa.libnexakotlin.Initialiser" in manifest
             assert "${applicationId}.androidx-startup" in manifest
             assert "android.permission.INTERNET" in manifest
-            with zipfile.ZipFile(io.BytesIO(aar.read("classes.jar"))) as classes:
+            if "classes.jar" in aar.namelist():
+                nexaclasses = aar.read("classes.jar")
+            else:
+                nexaclasses = aix.read(prefix + "files/probe-nexa-android-classes.jar")
+            with zipfile.ZipFile(io.BytesIO(nexaclasses)) as classes:
                 for name in ("LibnexaandroidKt", "Initialiser", "Native", "Native$Companion"):
                     assert f"org/nexa/libnexakotlin/{name}.class" in classes.namelist()
         assert any(n.endswith("startup-runtime-1.2.0.aar") for n in aix.namelist())
+        info = json.loads(aix.read(prefix + "files/component_build_infos.json"))[0]
+        for library in info["libraries"]:
+            folder = "aars/" if library.endswith(".aar") else "files/"
+            assert prefix + folder + library in aix.namelist(), library
+        if component["versionName"] == "0.0.2":
+            assert all(entry.file_size < 5 * 1024 * 1024 for entry in aix.infolist())
     print("PASS: descriptors, DEX, Startup metadata, Nexa JNI class names and four native ABIs")
     print("SHA-256:", hashlib.sha256(path.read_bytes()).hexdigest())
     print("Android runtime execution: NOT TESTED")

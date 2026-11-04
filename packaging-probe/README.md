@@ -68,3 +68,26 @@ Rush build succeeded with Java compilation, manifest merging, R8 shrinking,
 library relocation, desugaring, D8 and AIX generation. Archive inspection checks
 the block descriptors, DEX, Startup metadata, native class names and ELF files
 for four ABIs. An APK build and Android execution remain unverified.
+
+
+## Import compatibility variant 0.0.2
+
+After `rush build`, run `python3 tools/compat_aix.py`, then
+`python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.2.aix`.
+Import that compatibility output instead of the original Rush archive.
+
+MIT's PostgreSQL backend formerly limited each imported internal file to 5 MiB;
+commit b097193903890d6aa729ac52464ae342d3a600e2 raises this to 15 MiB. The live
+service version has not been established. The original archive includes a
+7,729,022-byte runtime JAR and a 5,629,487-byte AAR. These exceed the old limit.
+
+The postprocessor splits the runtime JAR, moves the Nexa AAR's classes.jar to a
+registered library JAR, preserves native files and manifest bytes, and updates
+component_build_infos.json. It verifies unchanged runtime entry payloads, Nexa
+classes, native binaries and DEX. No AIX entry reaches 5 MiB (largest: 3,276,061
+bytes). JSON descriptor version 0.0.2/2 identifies this packaging revision.
+
+The extra JAR registration follows MIT GenerateClasses.java and RunD8.java;
+AARs without classes.jar are already supported by MIT's AAR pipeline. The
+repackaged JAR graph passes D8 and Java ZIP/JSON parsing. This does not prove
+import into the live MIT service or execution on Android.
