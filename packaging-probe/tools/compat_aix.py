@@ -77,8 +77,10 @@ def convert(source, target):
     descriptor_path = PREFIX + "components.json"
     descriptors = json.loads(output[descriptor_path])
     for component in descriptors:
-        component["versionName"] = "0.0.2"
-        component["version"] = "2"
+        # Only the original probe needs a packaging-version upgrade.
+        if component["versionName"] == "0.0.1":
+            component["versionName"] = "0.0.2"
+            component["version"] = "2"
     output[descriptor_path] = json.dumps(descriptors, separators=(",", ":")).encode()
     assert output[PREFIX + "classes.jar"] == original[PREFIX + "classes.jar"]
     assert all(len(data) < LIMIT for data in output.values()), "Entry exceeds MIT limit"
@@ -94,5 +96,12 @@ def convert(source, target):
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]
     source = Path(sys.argv[1]) if len(sys.argv) > 1 else root / "out/org.nexa.appinventor.probe.aix"
-    target = Path(sys.argv[2]) if len(sys.argv) > 2 else root / "out/NexaPackagingProbe-0.0.2.aix"
+    if len(sys.argv) > 2:
+        target = Path(sys.argv[2])
+    else:
+        descriptor = json.loads(read_archive(source.read_bytes())[PREFIX + "components.json"])[0]
+        version = descriptor["versionName"]
+        if version == "0.0.1":
+            version = "0.0.2"
+        target = root / f"out/NexaPackagingProbe-{version}.aix"
     convert(source, target)

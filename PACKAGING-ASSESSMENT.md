@@ -319,3 +319,35 @@ Dimensione AIX 13.709.487 byte; massimo file interno 3.276.061 byte.
 SHA256 a0d3b6e3d2a121eed8fc16d5e92ca594a8dcdc3fe1b143fdb03dddb4cf637d98.
 Importazione live e APK restano da provare. La variante viene distribuita nel
 ramo dedicato già autorizzato, mantenendo l'originale per confronto.
+
+
+## Versione 0.0.3 — creazione e riapertura wallet testnet (2026-11-04)
+
+L'utente ha confermato l'importazione della 0.0.2 e riferito "inizializzazione
+riuscita". La prova non è stata osservata direttamente dall'agente.
+La 0.0.3 aggiunge CreateWallet(passphrase), OpenWallet(passphrase), ConfirmBackup
+ e GetAddress, con eventi asincroni e un solo worker per le operazioni wallet.
+Un DB fisso testnet privato per app; nessun reset da eccezione. Nuova creazione
+cifrata, salvata e ribloccata prima del successo; frase emessa una sola volta.
+OpenWallet sblocca per validare password/derivare l'indirizzo e poi riblocca.
+GetAddress usa solo il dato pubblico in cache e richiede conferma backup salvata.
+Network e WalletOpen sono proprietà di stato, non prove di sincronizzazione.
+Il limite di 12 caratteri è una regola dell'estensione, non una regola Nexa.
+
+API e fonti: nexa-wallet-lifecycle-and-chain/SKILL.md pattern 1/3/4/6,
+recoveryFlow.md (saveBip44Wallet e backup/cifratura), walletStartupTemplate.kt
+(controllo DB Android prima dell'apertura), nexa-identity-and-addresses/
+validateHelpers.kt (PayAddress.chainSelector), nexa-ktor-server-integration/
+SKILL.md (conversione PayAddress.toString). Corpus fissato invariato. Firme JVM
+verificate sull'artefatto 0.5.69; nessun setter di contesto extra-corpus usato.
+
+12 test del controller con backend finti superati: inclusi no sovrascrittura,
+riapertura simulata, password errata, file mancante/corrotto, errore salvataggio,
+backup, blocco chiavi anche per eccezione checked Kotlin. Non provano SQLite,
+cifratura Nexa, rete o ciclo di vita reale Android. Build Rush completa superata,
+postprocessore sotto 5 MiB, controlli descrittori/JNI e lettura Java ZIP/JSON passati.
+La prova del DB effettivo e della riapertura dopo arresto resta sul dispositivo.
+Importazione wallet da chiave, saldo e invio non implementati.
+
+AIX 0.0.3: 13.729.088 byte; SHA256
+ afce4ea5d0d77d28a78fbe76a27188cc88e47d07dbda460349224ba641898ead.

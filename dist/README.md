@@ -1,41 +1,37 @@
-# NexaPackagingProbe 0.0.2 — prototipo sperimentale
+# NexaPackagingProbe 0.0.3 — wallet testnet sperimentale
 
-Scarica **NexaPackagingProbe-0.0.2.aix** in questa cartella usando il pulsante
-Download del file o il collegamento Raw.
+Scaricare **NexaPackagingProbe-0.0.3.aix** e aggiornare l'estensione nel progetto
+App Inventor. Le versioni 0.0.1 e 0.0.2 restano solo come riferimento.
 
-Il file è distribuito in un ramo dedicato perché le API GitHub Releases non sono
-raggiungibili dall'ambiente di build. Non è una GitHub Release.
+## Funzioni
 
-## Stato
+- Initialize(): inizializzazione nativa, già provata dall'utente nella versione precedente.
+- CreateWallet(passphrase): crea e cifra un nuovo wallet testnet; rifiuta DB esistenti.
+- OpenWallet(passphrase): riapre il wallet salvato, senza ricrearlo su errore.
+- ConfirmBackup(): conferma esplicita di aver registrato la frase di recupero.
+- GetAddress(): evento AddressReceived(address), dopo conferma backup.
 
-- Build Rush 2.1.2 riuscita con Nexa Android 0.5.69.
-- Controlli statici superati: descrittori dei blocchi, DEX, provider Startup,
-  nomi JNI e librerie native per quattro ABI.
-- Richiede Android 10/API 29 o successivo.
-- Prova su Android e generazione APK da App Inventor ancora da eseguire.
-- Il Companion non supporta questo packaging AAR: usare un APK compilato.
-- Non implementa wallet, saldo o invio di fondi. Non usare come wallet reale.
+In WalletCreated(recoveryPhrase) mostrare la frase soltanto sul dispositivo e
+registrarla privatamente; poi confermare il backup e cancellarla dalla Label.
+La passphrase richiede almeno 12 caratteri, non viene salvata dall'estensione.
+I successivi avvii usano OpenWallet con la stessa passphrase.
+Errori: WalletFailed(operation, code, message).
 
-## Prova
+## Stato delle verifiche
 
-Importa la AIX in App Inventor, aggiungi NexaPackagingProbe, un Button e una Label.
-Da Button.Click chiama Initialize. Mostra nella Label l'evento
-InitializationSucceeded oppure InitializationFailed(code, message).
-Compila l'APK, installalo e prova il pulsante. Il successo dimostra soltanto
-l'inizializzazione nativa, non il funzionamento del wallet.
+12 test desktop sulle regole di persistenza/non sovrascrittura superati. Build
+Rush, D8, controlli ZIP/JSON, descrittori e JNI superati. Il DB/cifratura/rete reali
+su Android richiedono ancora la prova della versione 0.0.3 sul dispositivo.
+Solo Android 10+ e APK compilato, non Companion. Non è un wallet di produzione.
 
-Sorgenti e istruzioni: ../packaging-probe/README.md.
-Integrità del download: SHA256SUMS.
+## Packaging
 
+Ogni file interno resta sotto 5 MiB per compatibilità con server MIT precedenti
+alla correzione b097193903890d6aa729ac52464ae342d3a600e2. La 0.0.2 è stata
+importata con successo dall'utente. Tutte e quattro le ABI native sono conservate.
+Nessuna nuova API Nexa non documentata: citazioni nei sorgenti e nel README.
 
-## Variante 0.0.2 per server con limite di 5 MiB
-
-La 0.0.1 è conservata solo come riferimento. La 0.0.2 mantiene ogni file interno
-sotto 5 MiB. Classi, DEX e file nativi sono invariati; i JAR suddivisi sono
-registrati nei metadata delle librerie App Inventor. Il contenitore completo
-resta circa 14 MB: il limite qui affrontato è quello dei singoli file interni.
-
-MIT ha corretto il limite da 5 a 15 MiB nel commit
-b097193903890d6aa729ac52464ae342d3a600e2. Non è verificato se il servizio ai2a
-abbia quella correzione. L'errore di importazione null è compatibile con questa
-causa, ma non la dimostra. La nuova importazione richiede ancora una prova utente.
+Istruzioni complete e fonti: ../packaging-probe/README.md.
+Checksum: SHA256SUMS.
+Questo è un ramo dedicato, non una GitHub Release: le API Releases dell'ambiente
+sono bloccate. Il ramo main non è stato modificato.

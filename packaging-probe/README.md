@@ -1,93 +1,120 @@
-# Nexa packaging probe — experimental
+# NexaPackagingProbe 0.0.3 — wallet testnet sperimentale
 
-This is a Java MIT App Inventor extension to test Nexa Android packaging. It is
-not a wallet implementation. It creates no keys, connections or transactions.
+Estensione Java per MIT App Inventor 2 con Nexa Android 0.5.69. Il nome del
+componente resta NexaPackagingProbe per aggiornare i blocchi delle versioni precedenti.
+Solo testnet; nessuna funzione mainnet, saldo, invio o importazione chiave privata.
 
-## What is implemented
+## Blocchi disponibili
 
-- `Initialize()` runs native initialization on a worker thread.
-- Read-only `Initialized` reports success within the current process.
-- `InitializationSucceeded` and `InitializationFailed(code, message)` run on the UI thread.
-- Initialization is serialized across component instances in this extension's classloader.
-  Repeated calls after success do not initialize again; another installed extension may use
-  a separate classloader, which this probe cannot coordinate.
+| Funzione | Risultato asincrono |
+| --- | --- |
+| Initialize() | InitializationSucceeded oppure InitializationFailed(code, message) |
+| CreateWallet(passphrase) | WalletCreated(recoveryPhrase), solo se non esiste già un DB |
+| OpenWallet(passphrase) | WalletOpened; non crea mai un nuovo wallet |
+| ConfirmBackup() | BackupConfirmed; registra la conferma dell'utente |
+| GetAddress() | AddressReceived(address), dopo creazione/apertura e conferma backup |
 
-All requested annotations are present: DesignerComponent, SimpleFunction,
-SimpleProperty, SimpleEvent. Rush additionally requires its Extension annotation.
+Gli errori wallet arrivano a WalletFailed(operation, code, message). Ogni richiesta
+viene serializzata su un worker; gli eventi sono emessi sul thread UI.
+Le funzioni wallet inizializzano automaticamente la libreria se necessario.
 
-The only Nexa API called is `initializeLibNexa(variant)` from
-[nexa-wallet-lifecycle-and-chain, Setup and versions](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-wallet-lifecycle-and-chain/SKILL.md).
-The Java entry point `LibnexaandroidKt.initializeLibNexa(String)` was verified
-with javap against the published Android 0.5.69 classes.jar. An empty string is
-the documented default native variant. No undocumented Android context setter
-or private JNI method is called. The dependency manifest retains its Startup
-initializer, which still needs validation inside the final APK.
+Proprietà di sola lettura: Initialized, Network (sempre `testnet`), WalletOpen.
+WalletOpen significa che l'indirizzo pubblico è stato preparato in questo processo:
+non implica chiavi sbloccate o sincronizzazione della blockchain completata.
 
-## Rebuild
+## Prima creazione sul dispositivo
 
-Requirements: complete JDK 21, Gradle 8.14.3, Rush 2.1.2, Python 3 for archive inspection.
-Use Android 10/API 29 or newer for the device. Rush v206 supplies compile API 36.
+1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.3.aix`.
+2. Aggiungere un PasswordTextBox, una Label privata per la frase, una Label per
+   l'indirizzo e pulsanti Crea, Conferma backup e Indirizzo.
+3. Da Crea.Click chiamare CreateWallet con il testo della PasswordTextBox.
+   La passphrase deve avere almeno 12 caratteri: è una regola di questa estensione,
+   non una pretesa regola Nexa. Non inserirla come testo fisso nei blocchi.
+4. In WalletCreated mostrare recoveryPhrase sul dispositivo e registrarla
+   privatamente. Non inviarla in chat, non salvarla in TinyDB, non registrarla nei
+   log. La funzione non conserva una copia della frase per mostrarla di nuovo.
+5. Solo dopo aver registrato la frase, chiamare ConfirmBackup. L'estensione salva
+   una conferma booleana: non verifica se la frase è stata trascritta correttamente.
+6. In BackupConfirmed cancellare la Label della frase e il testo della password,
+   quindi chiamare GetAddress. In AddressReceived mostrare address.
+7. In WalletFailed mostrare operation, code e message per la diagnosi.
 
-1. In `dependency-resolution/`, run `gradle --no-daemon resolveAndroidGraph`.
-   The lockfile pins the graph and Gradle verification metadata checks artifact
-   hashes. The lock includes the Kotlin stdlib-common metadata alias required by
-   Gradle; no runtime artifact differs from the candidate manifest. It copies the 47 resolved artifacts into `../deps/`. Do not update
-   locks or verification metadata to silence an unexpected mismatch.
-2. Return to this directory and run `rush deps sync`, then `rush build`.
-3. Run `python3 tools/inspect_aix.py`.
+Il wallet viene cifrato e salvato prima dell'evento WalletCreated. Le chiavi sono
+ribloccate dopo il calcolo dell'indirizzo. Una finestra di creazione non cifrata
+esiste all'interno del flusso SDK prima di encrypt; un arresto o errore in quella
+fase richiede diagnosi e non provoca una ricreazione automatica al tentativo dopo.
+Per questa prova non servono fondi. Le build di test non sono wallet di produzione.
 
-Repository access must use the execution environment's configured proxy and CA
-trust. For Gradle, supply its HTTP/HTTPS proxy system properties if needed. No
-tokens or secret values belong in the project. JDK 21 is needed to read Nexa's
-Java 21 classes even though Rush compiles the component with `--release 17`.
-Local dependency files avoid relying on Rush's Maven resolver to select KMP variants.
-`original_names` preserves Nexa classes discovered by JNI, per Rush's diagnostic.
-The dependency hashes in the root candidate manifest describe the inspected
-downloads; they are not a claim of independent upstream signature verification.
+## Riapertura e prova di persistenza
 
-## Device test (not yet executed)
+Non disinstallare l'app e non cancellarne i dati durante la prova.
 
-1. Import `out/org.nexa.appinventor.probe.aix` into a new App Inventor project.
-2. Add NexaPackagingProbe, a Button and a Label. On Button.Click call Initialize.
-3. On InitializationSucceeded set the Label to `native initialization succeeded`;
-   verify Initialized is true. On InitializationFailed display code and message.
-4. Build an APK and install it on an Android 10+ test device. Launch and press
-   the button. An app-start crash may indicate Startup/provider packaging trouble
-   and requires Android logs; it cannot necessarily reach the failure event.
-5. Repeat the call and restart the app to test initialization after process restart.
+1. Annotare l'indirizzo pubblico mostrato dopo la creazione.
+2. Terminare e riaprire lo stesso APK.
+3. Inserire la stessa passphrase e chiamare OpenWallet.
+4. In WalletOpened chiamare GetAddress. Se il backup era confermato, la conferma
+   resta salvata. Il nuovo indirizzo deve corrispondere a quello precedente se
+   non ci sono state operazioni che lo abbiano fatto ruotare.
+5. Provare anche una passphrase errata: deve arrivare INVALID_PASSPHRASE senza
+   sostituire il database. Riprovare con quella corretta.
 
-Rush documents that extensions shipping AARs do not work in the AI Companion.
-Use a compiled APK. A successful event proves native initialization only, not
-wallet/database readiness, balance correctness or transaction broadcasting.
-This `.aix` is a development artifact using an older Nexa release, not a
-production wallet. No real funds are needed for this test.
+Il nome fisso del DB è `nexa_ai2_testnet_v1.db`, nello spazio privato dell'app.
+CreateWallet su un DB già presente emette WALLET_EXISTS: usare OpenWallet.
+Un DB incompleto/corrotto non viene cancellato o sovrascritto dall'estensione.
+GetAddress usa l'indirizzo pubblico acquisito all'ultima creazione/apertura;
+non chiama getNewAddress e non chiede di ruotarlo a ogni pressione del pulsante.
+newWallet/openWallet avviano la connessione blockchain secondo il flusso SDK:
+il completamento dell'evento non dimostra che il wallet sia sincronizzato.
 
-## Validation obtained
+## API Nexa e fonti primarie
 
-Rush build succeeded with Java compilation, manifest merging, R8 shrinking,
-library relocation, desugaring, D8 and AIX generation. Archive inspection checks
-the block descriptors, DEX, Startup metadata, native class names and ELF files
-for four ABIs. An APK build and Android execution remain unverified.
+Corpus fissato al commit `3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24`:
 
+- [Wallet lifecycle, Setup e pattern 1/3/4/6](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-wallet-lifecycle-and-chain/SKILL.md):
+  initializeLibNexa, newWallet, openWallet, ChainSelector.NEXATESTNET,
+  Bip44Wallet, recoverySecret, getCurrentDestination().address, encrypt, unlock, lock.
+- [Create/backup/restore checklist](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-wallet-lifecycle-and-chain/recoveryFlow.md):
+  ordine backup/cifratura e saveBip44Wallet, Create flow step 6.
+- [Template Android startup](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-wallet-lifecycle-and-chain/walletStartupTemplate.kt):
+  controllo getDatabasePath prima di aprire il DB, nessuna ricreazione da catch generico.
+- [Validazione indirizzi](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-identity-and-addresses/validateHelpers.kt):
+  PayAddress.chainSelector confrontato con la rete attesa.
+- [Server integration](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-ktor-server-integration/SKILL.md):
+  esempio di conversione PayAddress.toString(). Nessun modulo server viene aggiunto.
 
-## Import compatibility variant 0.0.2
+Le firme Java sono verificate con javap sugli artefatti ufficiali 0.5.69:
+LibnexaandroidKt.initializeLibNexa(String), InitKt.newWallet(String, ChainSelector,
+Function1), InitKt.openWallet(String, Function1), getRecoverySecret(),
+saveBip44Wallet(), encrypt(String), unlock(String), lock(),
+getCurrentDestination().getAddress(), PayAddress.getChainSelector().
+Non sono usati metodi privati JNI, setter di contesto extra-corpus o API inventate.
+Il provider Startup nel manifest fornisce l'inizializzazione Android prevista
+nell'artefatto: il suo funzionamento col database resta da verificare nel nuovo APK.
 
-After `rush build`, run `python3 tools/compat_aix.py`, then
-`python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.2.aix`.
-Import that compatibility output instead of the original Rush archive.
+## Ricompilazione
 
-MIT's PostgreSQL backend formerly limited each imported internal file to 5 MiB;
-commit b097193903890d6aa729ac52464ae342d3a600e2 raises this to 15 MiB. The live
-service version has not been established. The original archive includes a
-7,729,022-byte runtime JAR and a 5,629,487-byte AAR. These exceed the old limit.
+Requisiti: JDK 21 completo, Gradle 8.14.3, Rush 2.1.2 e Python 3.
+Rush v206 usa compile SDK 36; min_sdk=29 (Android 10).
 
-The postprocessor splits the runtime JAR, moves the Nexa AAR's classes.jar to a
-registered library JAR, preserves native files and manifest bytes, and updates
-component_build_infos.json. It verifies unchanged runtime entry payloads, Nexa
-classes, native binaries and DEX. No AIX entry reaches 5 MiB (largest: 3,276,061
-bytes). JSON descriptor version 0.0.2/2 identifies this packaging revision.
+1. In dependency-resolution/: `gradle --no-daemon resolveAndroidGraph`.
+   Lock e verifica checksum fissano il grafo di 47 artefatti, copiati in ../deps/.
+   Il lock include l'alias metadata kotlin-stdlib-common richiesto da Gradle.
+2. In questa directory: `rush deps sync` e `rush build`.
+3. `python3 tools/compat_aix.py`
+4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.3.aix`
 
-The extra JAR registration follows MIT GenerateClasses.java and RunD8.java;
-AARs without classes.jar are already supported by MIT's AAR pipeline. The
-repackaged JAR graph passes D8 and Java ZIP/JSON parsing. This does not prove
-import into the live MIT service or execution on Android.
+Usare proxy e CA della sessione. Non disattivare TLS o controlli di integrità.
+original_names preserva i nomi Nexa richiesti da JNI. Il postprocessore mantiene
+ogni file interno sotto 5 MiB per i server MIT precedenti alla correzione
+b097193903890d6aa729ac52464ae342d3a600e2. Mantiene i payload delle classi, DEX e
+librerie native invariati, registrando i JAR aggiuntivi nei build metadata MIT.
+La versione 0.0.2 è stata importata con successo dall'utente; la nuova 0.0.3
+richiede nuova compilazione APK e prova dispositivo. Non usare il Companion con AAR.
+
+## Verifiche automatizzate del ciclo di vita
+
+Compilare WalletSession.java e tests/org/nexa/appinventor/probe/WalletSessionTest.java
+con javac --release 17 in una directory esterna, poi eseguire
+org.nexa.appinventor.probe.WalletSessionTest. I test usano backend finti per provare
+le regole di non sovrascrittura, password, backup e blocco chiavi. Non simulano
+la correttezza del database Nexa, la cifratura effettiva o la rete Android.

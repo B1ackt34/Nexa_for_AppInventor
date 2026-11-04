@@ -49,3 +49,10 @@ LibnexaandroidKt.initializeLibNexa(String). Nessun setter Android extra-corpus
 usato: provider Startup conservato per la futura prova APK. Packaging verificato
 staticamente, esecuzione Android non ancora disponibile. I limiti su chiave
 privata e integrazione runtime non sono considerati risolti dalla build.
+
+
+2026-11-04: 0.0.3 implementa le API wallet documentate e verifica le firme Java
+con javap. L'inizializzazione del contesto Android rimane affidata al provider
+Startup già incluso nell'AAR: nessun setter extra-corpus. L'utente ha confermato
+inizializzazione nativa precedente, ma DB e riapertura richiedono nuova prova.
+La lacuna sull'importazione della chiave privata nel wallet locale resta aperta.

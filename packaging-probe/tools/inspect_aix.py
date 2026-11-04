@@ -17,11 +17,19 @@ def inspect(path):
         component = components[0]
         assert component["androidMinSdk"] == "29"
         assert component["external"] == "true"
-        assert {x["name"] for x in component["methods"]} == {"Initialize"}
-        assert {x["name"] for x in component["events"]} == {
-            "InitializationSucceeded", "InitializationFailed"
-        }
-        assert {x["name"] for x in component["blockProperties"]} == {"Initialized"}
+        methods = {"Initialize"}
+        events = {"InitializationSucceeded", "InitializationFailed"}
+        properties = {"Initialized"}
+        if component["versionName"] == "0.0.3":
+            methods |= {"CreateWallet", "OpenWallet", "ConfirmBackup", "GetAddress"}
+            events |= {"WalletCreated", "WalletOpened", "BackupConfirmed", "AddressReceived", "WalletFailed"}
+            properties |= {"Network", "WalletOpen"}
+            parameters = {method["name"]: method["params"] for method in component["methods"]}
+            assert parameters["CreateWallet"] == [{"name": "passphrase", "type": "text"}]
+            assert parameters["OpenWallet"] == [{"name": "passphrase", "type": "text"}]
+        assert {x["name"] for x in component["methods"]} == methods
+        assert {x["name"] for x in component["events"]} == events
+        assert {x["name"] for x in component["blockProperties"]} == properties
         with zipfile.ZipFile(io.BytesIO(aix.read(prefix + "classes.jar"))) as dex:
             assert dex.read("classes.dex").startswith(b"dex\n")
         native_aars = [n for n in aix.namelist() if n.endswith("libnexakotlin-release.aar")]
@@ -46,7 +54,7 @@ def inspect(path):
         for library in info["libraries"]:
             folder = "aars/" if library.endswith(".aar") else "files/"
             assert prefix + folder + library in aix.namelist(), library
-        if component["versionName"] == "0.0.2":
+        if component["versionName"] in {"0.0.2", "0.0.3"}:
             assert all(entry.file_size < 5 * 1024 * 1024 for entry in aix.infolist())
     print("PASS: descriptors, DEX, Startup metadata, Nexa JNI class names and four native ABIs")
     print("SHA-256:", hashlib.sha256(path.read_bytes()).hexdigest())
