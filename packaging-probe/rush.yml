@@ -1,0 +1,54 @@
+version: '0.0.1'
+min_sdk: 29
+dependencies:
+  - android-driver-2.3.2.aar
+  - annotation-jvm-1.9.1.jar
+  - annotations-23.0.0.jar
+  - atomicfu-jvm-0.33.0.jar
+  - bignum-jvm-0.3.10.jar
+  - bignum-serialization-kotlinx-jvm-0.3.10.jar
+  - kotlin-reflect-2.3.10.jar
+  - kotlin-stdlib-2.3.21.jar
+  - kotlin-stdlib-jdk7-2.3.10.jar
+  - kotlin-stdlib-jdk8-2.3.10.jar
+  - kotlinx-coroutines-core-jvm-1.11.0.jar
+  - kotlinx-coroutines-slf4j-1.11.0.jar
+  - kotlinx-datetime-jvm-0.8.0.jar
+  - kotlinx-io-bytestring-jvm-0.9.0.jar
+  - kotlinx-io-core-jvm-0.9.0.jar
+  - kotlinx-serialization-core-jvm-1.11.0.jar
+  - kotlinx-serialization-json-io-jvm-1.11.0.jar
+  - kotlinx-serialization-json-jvm-1.11.0.jar
+  - ktor-client-cio-jvm-3.5.0.jar
+  - ktor-client-content-negotiation-jvm-3.5.0.jar
+  - ktor-client-core-jvm-3.5.0.jar
+  - ktor-client-json-jvm-3.5.0.jar
+  - ktor-client-serialization-jvm-3.5.0.jar
+  - ktor-events-jvm-3.5.0.jar
+  - ktor-http-cio-jvm-3.5.0.jar
+  - ktor-http-jvm-3.5.0.jar
+  - ktor-io-jvm-3.5.0.jar
+  - ktor-network-jvm-3.5.0.jar
+  - ktor-network-tls-jvm-3.5.0.jar
+  - ktor-serialization-jvm-3.5.0.jar
+  - ktor-serialization-kotlinx-json-jvm-3.5.0.jar
+  - ktor-serialization-kotlinx-jvm-3.5.0.jar
+  - ktor-sse-jvm-3.5.0.jar
+  - ktor-utils-jvm-3.5.0.jar
+  - ktor-websocket-serialization-jvm-3.5.0.jar
+  - ktor-websockets-jvm-3.5.0.jar
+  - libnexakotlin-release.aar
+  - mpthreads-release.aar
+  - okio-jvm-3.17.0.jar
+  - runtime-jvm-2.3.2.jar
+  - slf4j-api-2.0.18.jar
+  - sqldelight-async-extensions-jvm-2.3.2.jar
+  - sqldelight-coroutines-extensions-jvm-2.3.2.jar
+  - sqlite-framework.aar
+  - sqlite.aar
+  - startup-runtime-1.2.0.aar
+  - tracing-1.0.0.aar
+
+# JNI resolves these classes by their original names (Rush build diagnostic).
+original_names:
+  - org.nexa.libnexakotlin

@@ -1,0 +1,41 @@
+abstract class AndroidJvmCompatibility implements AttributeCompatibilityRule<String> {
+ void execute(CompatibilityCheckDetails<String> d) {
+  if (d.consumerValue == 'androidJvm' && d.producerValue == 'jvm') d.compatible()
+  if (d.consumerValue == 'android' && d.producerValue == 'standard-jvm') d.compatible()
+ }
+}
+dependencies {
+ attributesSchema {
+  attribute(Attribute.of('org.jetbrains.kotlin.platform.type', String)) { compatibilityRules.add(AndroidJvmCompatibility) }
+  attribute(Attribute.of('org.gradle.jvm.environment', String)) { compatibilityRules.add(AndroidJvmCompatibility) }
+ }
+}
+repositories {
+ mavenCentral()
+ google()
+ maven { url = uri('https://gitlab.com/api/v4/projects/48545045/packages/maven') }
+ maven { url = uri('https://gitlab.com/api/v4/projects/48544966/packages/maven') }
+}
+configurations {
+ androidGraph {
+  canBeResolved = true
+  canBeConsumed = false
+  attributes {
+   attribute(Usage.USAGE_ATTRIBUTE, objects.named(Usage, 'java-runtime'))
+   attribute(Category.CATEGORY_ATTRIBUTE, objects.named(Category, 'library'))
+   attribute(Attribute.of('org.jetbrains.kotlin.platform.type', String), 'androidJvm')
+   attribute(Attribute.of('org.gradle.jvm.environment', String), 'android')
+  }
+ }
+}
+dependencies { androidGraph 'org.nexa:libnexakotlin-android:0.5.69' }
+tasks.register('resolveAndroidGraph') {
+ doLast {
+  def result = configurations.androidGraph.incoming.artifactView { lenient = true }.artifacts
+  result.artifacts.each { artifact -> println "RESOLVED ${artifact.id.componentIdentifier} ${artifact.file.name}"; copy { from artifact.file; into "../deps" } }
+  result.failures.each { it.printStackTrace(System.out) }
+  if (!result.failures.empty) throw new GradleException('Android dependency resolution incomplete')
+ }
+}
+
+dependencyLocking { lockAllConfigurations() }
