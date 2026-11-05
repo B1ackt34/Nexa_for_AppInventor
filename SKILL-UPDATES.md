@@ -56,3 +56,19 @@ con javap. L'inizializzazione del contesto Android rimane affidata al provider
 Startup già incluso nell'AAR: nessun setter extra-corpus. L'utente ha confermato
 inizializzazione nativa precedente, ma DB e riapertura richiedono nuova prova.
 La lacuna sull'importazione della chiave privata nel wallet locale resta aperta.
+
+
+2026-11-05 — fastForward e release Android 0.5.69
+
+Stato: open (copertura derivazioni per versioni precedenti). Il corpus fissato
+3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24, wallet lifecycle pattern 4, descrive
+receive/change/identity. Nel sources JAR ufficiale libnexakotlin-android 0.5.69,
+commonMain/fastforward.kt, funzione Bip44Wallet.fastForward (circa righe 148-210),
+l'helper avvia normal e change per account 0, senza una ricerca identity esplicita.
+La nuova estensione usa soltanto l'helper documentato, senza inventare percorsi;
+non dichiara copertura completa di tutti gli account/identità. Firma JVM verificata
+con javap: FastforwardKt.fastForward(Bip44Wallet, Function1) -> Objectify<Boolean>.
+La derivazione legge wallet.secret durante il job: il wallet cifrato viene
+sbloccato tramite l'API documentata per la durata dell'operazione, poi ribloccato.
+Non vengono usate direttamente secret, funzioni interne o altri overload non
+necessari. Il callback finished non viene trattato come prova di successo.

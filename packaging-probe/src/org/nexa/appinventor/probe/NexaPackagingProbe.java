@@ -13,10 +13,13 @@ import com.google.appinventor.components.runtime.EventDispatcher;
 import org.nexa.libnexakotlin.LibnexaandroidKt;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 /** Experimental testnet wallet. No mainnet, private-key import or sending operations. */
-@Extension(description = "Experimental Nexa testnet wallet: create, reopen, address, balance and sync status.")
-@DesignerComponent(version = 4, description = "Experimental Nexa testnet wallet",
+@Extension(description = "Experimental Nexa testnet wallet with manual Electrum fast sync.")
+@DesignerComponent(version = 5, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
 public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
@@ -25,6 +28,7 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
   private static final ExecutorService WALLET_WORKER = Executors.newSingleThreadExecutor(
       runnable -> new Thread(runnable, "NexaWallet"));
   private static volatile WalletSession session;
+  private static final ScheduledThreadPoolExecutor FAST_SYNC_WATCHDOG = createWatchdog();
   private final android.content.Context applicationContext;
   private boolean initializing;
 
@@ -45,6 +49,19 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
   public boolean WalletOpen() {
     WalletSession active = session;
     return active != null && active.isOpen();
+  }
+
+  private static ScheduledThreadPoolExecutor createWatchdog() {
+    ScheduledThreadPoolExecutor timer = new ScheduledThreadPoolExecutor(1,
+        runnable -> new Thread(runnable, "NexaFastSyncWatchdog"));
+    timer.setRemoveOnCancelPolicy(true);
+    return timer;
+  }
+
+  @SimpleProperty(description = "True while an SDK fast sync remains in flight, including a stop awaiting confirmation.")
+  public boolean FastSyncRunning() {
+    WalletSession active = session;
+    return active != null && active.fastSyncRunning();
   }
 
   private static void initializeNative() {
@@ -159,6 +176,31 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
     });
   }
 
+  @SimpleFunction(description = "Manually fast-sync via Electrum, trusting its history. Requires the open wallet passphrase; keys are temporarily unlocked. Five-minute watchdog.")
+  public void FastSync(String passphrase) {
+    walletOperation("FastSync", () -> walletSession().fastSync(passphrase, WALLET_WORKER,
+        timeout -> {
+          ScheduledFuture<?> scheduled = FAST_SYNC_WATCHDOG.schedule(timeout, 5, TimeUnit.MINUTES);
+          return () -> scheduled.cancel(false);
+        }, new WalletSession.FastSyncListener() {
+          public void progress(String message) {
+            form.runOnUiThread(() -> FastSyncProgress(message));
+          }
+          public void finished(WalletSession.FastSyncResult result) {
+            form.runOnUiThread(() -> FastSyncFinished(result.advanced, result.synced,
+                result.cancelled, result.beforeHeight, result.afterHeight, result.chainHeight));
+          }
+          public void failed(String code, String message) {
+            form.runOnUiThread(() -> WalletFailed("FastSync", code, message));
+          }
+        }));
+  }
+
+  @SimpleFunction(description = "Request cooperative cancellation. FastSyncRunning remains true until the SDK finishes; this is not immediate thread termination.")
+  public void CancelFastSync() {
+    walletOperation("CancelFastSync", () -> walletSession().cancelFastSync());
+  }
+
   @SimpleEvent(description = "New encrypted testnet wallet created. Show recoveryPhrase privately once for backup; never log or transmit it.")
   public void WalletCreated(String recoveryPhrase) {
     EventDispatcher.dispatchEvent(this, "WalletCreated", recoveryPhrase);
@@ -180,6 +222,18 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
       boolean synced, boolean connected, String syncedHeight, String chainHeight) {
     EventDispatcher.dispatchEvent(this, "BalanceReceived", total, confirmed,
         unconfirmed, synced, connected, syncedHeight, chainHeight);
+  }
+
+  @SimpleEvent(description = "SDK fast-sync progress text. It is not a percentage; do not interpret start/finished as success.")
+  public void FastSyncProgress(String message) {
+    EventDispatcher.dispatchEvent(this, "FastSyncProgress", message);
+  }
+
+  @SimpleEvent(description = "Attempt ended and keys relocked. advanced only reports a height increase, which can include normal SPV progress; synced is the SDK state, not independent verification of Electrum history.")
+  public void FastSyncFinished(boolean advanced, boolean synced, boolean cancelled,
+      String beforeHeight, String afterHeight, String chainHeight) {
+    EventDispatcher.dispatchEvent(this, "FastSyncFinished", advanced, synced,
+        cancelled, beforeHeight, afterHeight, chainHeight);
   }
 
   @SimpleEvent(description = "Wallet operation failed. Does not include the passphrase or recovery phrase.")

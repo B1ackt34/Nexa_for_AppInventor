@@ -383,3 +383,39 @@ blocchi e limite 5 MiB superati. Per la funzione nuova rimane la prova dispositi
 AIX 0.0.4: 13.733.623 byte, massimo file interno 3.276.061 byte.
 SHA256 43c491760fb966ddd868b63845ef9791bcd2c65269cf6a3c8c2296cefaf620fc.
 SendNexa e importazione chiave privata rimangono non implementate.
+
+
+## Versione 0.0.5 — FastSync manuale (2026-11-05)
+
+L'utente ha confermato connessione e avanzamento SPV nella 0.0.4, non la completa
+sincronizzazione. Implementato FastSync(passphrase), perché il wallet cifrato
+richiede derivazione delle chiavi durante il job, senza memorizzare la passphrase.
+Fonte primaria: wallet lifecycle Pattern 4 Fast-forward sync, con Objectify abort,
+callback nullable e "finished" non conclusivo; pattern 6 per unlock/lock. javap
+su 0.5.69 conferma FastforwardKt.fastForward(Bip44Wallet, Function1) e setObj.
+Nessun overload basso livello, setter contesto o derivazione privata usati.
+
+Operazione asincrona esplicita: sblocco temporaneo, callback serializzati sul worker,
+progressi UI e evento FastSyncFinished(advanced, synced, cancelled, beforeHeight,
+afterHeight, chainHeight) dopo riblocco. advanced osserva solo la variazione
+altezza, inclusa possibile SPV concorrente: non è una prova che Electrum abbia
+funzionato. synced è stato SDK, non corroborazione indipendente. Fiducia Electrum
+esplicitata nella documentazione e descrizione blocco. La release 0.5.69 mostra
+receive/change nell'helper; non promettiamo copertura esaustiva di account/identity.
+
+CancelFastSync richiede abort cooperativo; nessun successo o arresto immediato
+fittizio. Watchdog best effort cinque minuti richiede abort e tenta lock. Il guard
+resta finché SDK non termina, anche dopo timeout/start fault. Open/Create/FastSync
+sono bloccati durante un job; GetBalance/indirizzo pubblico restano disponibili.
+Se non arriva terminale, istruzioni di arresto processo e riapertura, nessun reset.
+Se già synced non viene sbloccato nulla; se chainHeight non è nota viene emesso
+CHAIN_TIP_UNAVAILABLE. Duplicati e callback tardivi ignorati per identità del job.
+
+36 test locali backend finti passati: includono gestione asincrona, no avanzamento,
+progressi concorrenti, unlock/lock, startup error, timer, cancellazione e callback
+sincroni/tardivi/duplicati. Non provano rete Electrum/SQLite/Android reali.
+Build Rush finale (javac, R8, D8) superata dopo irrigidimento degli errori d'avvio.
+Pacchetto compat sotto 5 MiB per file, test descrittori/ZIP/JSON/JNI superati.
+AIX 0.0.5: 13.754.661 byte, massimo interno 3.276.061 byte.
+SHA256 d8914e6a3a16409ea3f346594c85527e72c7318f40bb219f4f32cf10a261ff08.
+Prestazioni ed esito FastSync su smartphone rimangono da verificare dall'utente.

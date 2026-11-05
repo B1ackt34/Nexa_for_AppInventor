@@ -21,6 +21,10 @@ public final class WalletSessionTest {
     int phraseReads;
     int balanceReads, unlocks, addressReads;
     RuntimeException balanceFailure;
+    RuntimeException fastStartFailure;
+    java.util.function.Consumer<String> fastProgress;
+    int fastStarts, aborts;
+    boolean finishInline;
     WalletBalance reading = new WalletBalance(0, 0, 0, false, false, -1, -1);
     String password;
     public String recoveryPhrase() { phraseReads++; return "FAKE TEST PHRASE"; }
@@ -43,6 +47,14 @@ public final class WalletSessionTest {
       if (balanceFailure != null) throw balanceFailure;
       return reading;
     }
+    public Runnable startFastSync(java.util.function.Consumer<String> progress) {
+      fastStarts++;
+      fastProgress = progress;
+      if (fastStartFailure != null) throw fastStartFailure;
+      progress.accept("start");
+      if (finishInline) progress.accept("finished");
+      return () -> aborts++;
+    }
     @SuppressWarnings("unchecked")
     private static <T extends Throwable> String sneaky(Throwable t) throws T { throw (T) t; }
   }
@@ -55,6 +67,43 @@ public final class WalletSessionTest {
   }
   private static void test(String name, Runnable work) {
     work.run(); passed++; System.out.println("PASS " + name);
+  }
+  private static final class Callbacks implements java.util.concurrent.Executor {
+    final java.util.Queue<Runnable> queued = new java.util.ArrayDeque<>();
+    public void execute(Runnable work) { queued.add(work); }
+    void drain() { while (!queued.isEmpty()) queued.remove().run(); }
+  }
+  private static final class Watchdog implements WalletSession.Watchdog {
+    Runnable timeout;
+    boolean cancelled;
+    public Runnable schedule(Runnable timeout) {
+      this.timeout = timeout; cancelled = false; return () -> cancelled = true;
+    }
+    void fire() { if (!cancelled && timeout != null) timeout.run(); }
+  }
+  private static final class Listener implements WalletSession.FastSyncListener {
+    final java.util.List<String> progress = new java.util.ArrayList<>();
+    final java.util.List<WalletSession.FastSyncResult> results = new java.util.ArrayList<>();
+    final java.util.List<String> failures = new java.util.ArrayList<>();
+    public void progress(String message) { progress.add(message); }
+    public void finished(WalletSession.FastSyncResult result) { results.add(result); }
+    public void failed(String code, String message) { failures.add(code); }
+  }
+  private static final class FastFixture {
+    final FakeStorage storage = new FakeStorage();
+    final WalletSession session = new WalletSession(storage);
+    final Callbacks callbacks = new Callbacks();
+    final Watchdog watchdog = new Watchdog();
+    final Listener listener = new Listener();
+    FastFixture() {
+      session.create("test-only-passphrase");
+      storage.wallet.reading = new WalletBalance(0, 0, 0, false, true, 100, 1000);
+    }
+    void start() { session.fastSync("test-only-passphrase", callbacks, watchdog, listener); }
+    void finish(boolean synced, long height) {
+      storage.wallet.reading = new WalletBalance(0, 0, 0, synced, true, height, 1000);
+      storage.wallet.fastProgress.accept("finished"); callbacks.drain();
+    }
   }
   public static void main(String[] args) {
     String password = "test-only-passphrase";
@@ -183,6 +232,95 @@ public final class WalletSessionTest {
       FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
       session.create(password); expect("INVALID_PASSPHRASE", () -> session.open("wrong-passphrase"));
       expect("WALLET_NOT_OPEN", session::balance); check(storage.wallet.balanceReads == 0);
+    });
+    test("fast sync retains unlock until SDK completion, then relocks", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.callbacks.drain();
+      check(f.session.fastSyncRunning() && !f.storage.wallet.locked);
+      f.finish(true, 1000);
+      check(!f.session.fastSyncRunning() && f.storage.wallet.locked);
+      check(f.listener.results.size() == 1 && f.watchdog.cancelled);
+      check(f.listener.results.get(0).advanced && f.listener.results.get(0).synced);
+      check(f.storage.wallet.phraseReads == 1);
+    });
+    test("finished without a jump or sync is not reported as successful", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.finish(false, 100);
+      check(!f.listener.results.get(0).advanced && !f.listener.results.get(0).synced);
+      check(f.storage.wallet.locked);
+    });
+    test("normal SPV progress can advance height while fast sync remains unsynced", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.finish(false, 110);
+      check(f.listener.results.get(0).advanced && !f.listener.results.get(0).synced);
+    });
+    test("already synced fast sync does not unlock or start an SDK search", () -> {
+      FastFixture f = new FastFixture(); f.storage.wallet.reading = new WalletBalance(0, 0, 0, true, true, 1000, 1000);
+      f.start(); check(f.storage.wallet.fastStarts == 0 && f.storage.wallet.unlocks == 0);
+      check(f.listener.results.get(0).synced && !f.session.fastSyncRunning());
+    });
+    test("unknown chain tip never starts or unlocks fast sync", () -> {
+      FastFixture f = new FastFixture(); f.storage.wallet.reading = new WalletBalance(0, 0, 0, false, false, 0, 0);
+      expect("CHAIN_TIP_UNAVAILABLE", f::start);
+      check(f.storage.wallet.fastStarts == 0 && f.storage.wallet.unlocks == 0);
+    });
+    test("wrong fast sync passphrase cannot start SDK and keys stay locked", () -> {
+      FastFixture f = new FastFixture();
+      expect("INVALID_PASSPHRASE", () -> f.session.fastSync("incorrect-passphrase", f.callbacks, f.watchdog, f.listener));
+      check(f.storage.wallet.fastStarts == 0 && f.storage.wallet.locked && !f.session.fastSyncRunning());
+    });
+    test("duplicate sync and wallet reopen are rejected during an active search", () -> {
+      FastFixture f = new FastFixture(); f.start();
+      expect("FAST_SYNC_RUNNING", f::start);
+      expect("FAST_SYNC_RUNNING", () -> f.session.open(password));
+      expect("FAST_SYNC_RUNNING", () -> f.session.create(password));
+      check(f.storage.wallet.fastStarts == 1 && !f.storage.wallet.locked);
+      f.finish(true, 1000);
+    });
+    test("SDK startup exception relocks and quarantines a possibly launched job", () -> {
+      FastFixture f = new FastFixture(); f.storage.wallet.fastStartFailure = new IllegalStateException("SDK failed");
+      expect("FAST_SYNC_START_FAILED", f::start);
+      check(f.storage.wallet.locked && f.session.fastSyncRunning());
+      expect("FAST_SYNC_RUNNING", () -> f.session.open(password));
+      f.storage.wallet.fastProgress.accept("finished"); f.callbacks.drain();
+      check(!f.session.fastSyncRunning() && f.listener.results.isEmpty());
+    });
+    test("cooperative cancel does not falsely announce immediate completion", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.session.cancelFastSync();
+      check(f.storage.wallet.aborts == 1 && f.session.fastSyncRunning() && f.listener.results.isEmpty());
+      f.finish(false, 100);
+      check(f.listener.results.get(0).cancelled && f.storage.wallet.locked);
+    });
+    test("timeout requests abort and relocks, but quarantines the in-flight SDK handle", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.watchdog.fire();
+      check(f.storage.wallet.aborts == 1 && f.storage.wallet.locked && f.session.fastSyncRunning());
+      check(f.listener.failures.equals(java.util.List.of("FAST_SYNC_TIMEOUT")));
+      expect("FAST_SYNC_RUNNING", f::start); f.watchdog.fire();
+      check(f.listener.failures.size() == 1);
+      f.finish(false, 100);
+      check(!f.session.fastSyncRunning() && f.listener.results.isEmpty());
+    });
+    test("duplicate terminal callbacks are delivered only once", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.finish(true, 1000); f.finish(true, 1000);
+      check(f.listener.results.size() == 1 && f.listener.failures.isEmpty());
+    });
+    test("late callbacks from an old search cannot finish a new search", () -> {
+      FastFixture f = new FastFixture(); f.start(); java.util.function.Consumer<String> old = f.storage.wallet.fastProgress;
+      f.finish(false, 101); f.start(); old.accept("finished"); f.callbacks.drain();
+      check(f.session.fastSyncRunning() && !f.storage.wallet.locked);
+      f.finish(true, 1000); check(f.listener.results.size() == 2);
+    });
+    test("inline terminal callback before abort handle assignment is safe", () -> {
+      FastFixture f = new FastFixture(); f.storage.wallet.finishInline = true;
+      f.session.fastSync(password, Runnable::run, f.watchdog, f.listener);
+      check(!f.session.fastSyncRunning() && f.storage.wallet.locked && f.watchdog.timeout == null);
+      check(f.listener.results.size() == 1);
+    });
+    test("null progress is ignored and balance reads remain available during sync", () -> {
+      FastFixture f = new FastFixture(); f.start(); f.storage.wallet.fastProgress.accept(null); f.callbacks.drain();
+      check(f.listener.progress.equals(java.util.List.of("start")));
+      check(f.session.balance().syncedHeight.equals("100") && f.session.fastSyncRunning());
+      f.finish(true, 1000);
+    });
+    test("cancel without an active search reports the explicit error", () -> {
+      FastFixture f = new FastFixture(); expect("FAST_SYNC_NOT_RUNNING", f.session::cancelFastSync);
     });
     System.out.println("Passed: " + passed + "; Android/Nexa execution is not covered by these tests.");
   }

@@ -1,4 +1,4 @@
-# NexaPackagingProbe 0.0.4 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.5 — wallet testnet sperimentale
 
 Estensione Java per MIT App Inventor 2 con Nexa Android 0.5.69. Il nome del
 componente resta NexaPackagingProbe per aggiornare i blocchi delle versioni precedenti.
@@ -14,18 +14,21 @@ Solo testnet; nessuna funzione mainnet, invio o importazione chiave privata.
 | ConfirmBackup() | BackupConfirmed; registra la conferma dell'utente |
 | GetAddress() | AddressReceived(address), dopo creazione/apertura e conferma backup |
 | GetBalance() | BalanceReceived(total, confirmed, unconfirmed, synced, connected, syncedHeight, chainHeight) |
+| FastSync(passphrase) | FastSyncProgress e FastSyncFinished; errori in WalletFailed |
+| CancelFastSync() | Richiesta di arresto cooperativo, non completamento immediato |
 
 Gli errori wallet arrivano a WalletFailed(operation, code, message). Ogni richiesta
 viene serializzata su un worker; gli eventi sono emessi sul thread UI.
 Le funzioni wallet inizializzano automaticamente la libreria se necessario.
 
-Proprietà di sola lettura: Initialized, Network (sempre `testnet`), WalletOpen.
+Proprietà di sola lettura: Initialized, Network (sempre `testnet`), WalletOpen,
+FastSyncRunning.
 WalletOpen significa che l'indirizzo pubblico è stato preparato in questo processo:
 non implica chiavi sbloccate o sincronizzazione della blockchain completata.
 
 ## Prima creazione sul dispositivo
 
-1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.4.aix`.
+1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.5.aix`.
 2. Aggiungere un PasswordTextBox, una Label privata per la frase, una Label per
    l'indirizzo e pulsanti Crea, Conferma backup e Indirizzo.
 3. Da Crea.Click chiamare CreateWallet con il testo della PasswordTextBox.
@@ -102,7 +105,7 @@ Rush v206 usa compile SDK 36; min_sdk=29 (Android 10).
    Il lock include l'alias metadata kotlin-stdlib-common richiesto da Gradle.
 2. In questa directory: `rush deps sync` e `rush build`.
 3. `python3 tools/compat_aix.py`
-4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.4.aix`
+4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.5.aix`
 
 Usare proxy e CA della sessione. Non disattivare TLS o controlli di integrità.
 original_names preserva i nomi Nexa richiesti da JNI. Il postprocessore mantiene
@@ -173,5 +176,82 @@ getBalance(), getBalanceConfirmed(), getBalanceUnconfirmed(), synced(long),
 getSyncedHeight(), getBlockchain().getCurHeight(), getNet().getP2pCnxns().
 La formattazione BigDecimal è codice Java applicativo, non un'API Nexa nuova.
 
-21 test del controller/formattazione superati con backend finti. Cifratura, DB,
+36 test del controller/formattazione/FastSync superati con backend finti. Cifratura, DB,
 rete e valori reali del saldo su Android richiedono la prova del nuovo APK.
+
+
+## FastSync manuale (0.0.5)
+
+Il comando richiede **la passphrase** del wallet cifrato: non viene conservata per
+riutilizzarla dopo OpenWallet. Non si avvia automaticamente all'apertura.
+Prima aggiornare lo stesso progetto, ricompilare e installare l'APK come
+aggiornamento, mantenendo dati e DB esistenti. Non creare un nuovo wallet.
+
+1. Aprire il wallet con OpenWallet e attendere WalletOpened.
+2. Verificare con GetBalance che chainHeight sia maggiore di zero. Serve una
+   punta della catena conosciuta, come nel flusso documentato dalla skill.
+3. Da un pulsante chiamare FastSync con la stessa passphrase. Questa azione
+   sceglie esplicitamente la ricostruzione della storia tramite Electrum, con
+   maggiore fiducia nel server rispetto alla scansione SPV ordinaria.
+4. In FastSyncProgress(message) mostrare message: è testo SDK, non percentuale.
+5. In FastSyncFinished mostrare synced, beforeHeight e afterHeight e richiamare
+   GetBalance. Un evento terminale non va etichettato automaticamente "successo".
+6. Mostrare sempre WalletFailed(operation, code, message).
+
+FastSyncFinished(advanced, synced, cancelled, beforeHeight, afterHeight,
+chainHeight) riporta letture, non una verifica indipendente della storia:
+
+- advanced: l'altezza è aumentata. Può includere il normale avanzamento SPV
+  contemporaneo, quindi non dimostra da solo che Electrum abbia completato la ricerca.
+- synced: lo stato SDK rilevato alla fine. Anche questo mantiene il compromesso
+  di fiducia nella storia restituita da Electrum, non aggiunge una prova SPV.
+- cancelled: è stata registrata una richiesta di annullamento. Non significa
+  rollback o che l'operazione non abbia già aggiornato lo stato del wallet.
+- Le altezze sono testo per evitare perdita di precisione nei blocchi.
+
+Se era già sincronizzato, l'evento terminale restituisce synced=true senza
+sbloccare chiavi o avviare un'altra ricerca. Se Electrum non trova nodi, il
+callback SDK "finished" può comunque arrivare: synced=false e l'assenza di un
+salto non vengono convertiti in un successo fittizio.
+
+### Chiavi, annullamento e timeout
+
+La ricerca deriva indirizzi dal wallet: durante il tentativo le chiavi devono
+restare temporaneamente sbloccate. L'estensione non richiede la frase di recupero
+né la invia a Electrum e non salva la passphrase. Al callback finale riblocca il
+wallet prima di emettere FastSyncFinished. GetBalance resta disponibile durante
+la ricerca; CreateWallet, OpenWallet e un secondo FastSync vengono rifiutati.
+
+CancelFastSync imposta il flag di abort documentato. È cooperativo: si attende il
+terminale SDK prima di liberare lo stato in corso e ribloccare ordinariamente.
+Un watchdog richiede l'arresto e tenta il riblocco dopo cinque minuti. È una
+protezione best effort: sospensione del processo Android o operazioni bloccate
+possono ritardare il timer. Non è una garanzia assoluta di durata in memoria.
+
+In caso di FAST_SYNC_TIMEOUT, FAST_SYNC_START_FAILED o FAST_SYNC_CLEANUP_FAILED,
+FastSyncRunning può restare vero finché non arriva una conferma terminale SDK.
+Non si avvia una seconda ricerca su un thread di cui non è noto l'arresto.
+Se resta così, arrestare completamente il processo dell'app e riaprirla, senza
+cancellare dati. FAST_SYNC_LOCK_FAILED richiede l'arresto del processo.
+Non forniamo un blocco hard-kill di thread nativi e non fingiamo che l'annullamento
+immediato sia supportato dall'SDK. Nessun reset o cancellazione wallet aggiunto.
+
+### Fonte e compatibilità
+
+[nexa-wallet-lifecycle-and-chain/SKILL.md, Pattern 4 — Fast-forward sync](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-wallet-lifecycle-and-chain/SKILL.md)
+documenta Bip44Wallet.fastForward(callback), Objectify<Boolean>, aborter.obj=true,
+compromesso Electrum e il significato non conclusivo di "finished".
+Sblocco/riblocco: stessa skill, pattern 6. Altezze e synced: pattern 4.
+Firme Java verificate su 0.5.69: FastforwardKt.fastForward(Bip44Wallet, Function1),
+Objectify.setObj(Boolean); Unit.INSTANCE è l'interoperabilità Kotlin standard.
+Non si usa l'overload basso livello CommonWallet.fastForward(height, date, hash, txs).
+
+Il sources JAR ufficiale 0.5.69 mostra receive/change nell'helper; non presentiamo
+questa vecchia release come una scansione esaustiva di ogni percorso/account o
+identità citato genericamente dal corpus corrente. Nessuna derivazione extra
+viene inventata. Lacuna registrata in SKILL-UPDATES.md.
+
+36 test locali passati includono callback sincroni/tardivi/duplicati, password
+errata, nessun salto, progresso SPV concorrente, annullamento, timeout, guardia
+anti-concorrenza e riblocco. Non eseguono Electrum o Android: velocità, esito
+reale e persistenza dopo fast-forward richiedono la prova dello smartphone.

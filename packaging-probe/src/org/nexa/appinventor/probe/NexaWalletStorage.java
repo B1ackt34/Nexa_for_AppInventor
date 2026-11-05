@@ -5,6 +5,10 @@ import org.nexa.libnexakotlin.Bip44Wallet;
 import org.nexa.libnexakotlin.ChainSelector;
 import org.nexa.libnexakotlin.InitKt;
 import org.nexa.libnexakotlin.PayAddress;
+import org.nexa.libnexakotlin.FastforwardKt;
+import org.nexa.libnexakotlin.Objectify;
+import kotlin.Unit;
+import java.util.function.Consumer;
 
 /** Adapter for APIs documented in Nexa AI Skills, commit 3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24. */
 final class NexaWalletStorage implements WalletSession.Storage {
@@ -103,6 +107,17 @@ final class NexaWalletStorage implements WalletSession.Storage {
       boolean connected = !wallet.getBlockchain().getNet().getP2pCnxns().isEmpty();
       return new WalletBalance(total, confirmed, unconfirmed, synced, connected,
           syncedHeight, chainHeight);
+    }
+
+    public Runnable startFastSync(Consumer<String> progress) {
+      // nexa-wallet-lifecycle-and-chain/SKILL.md, Pattern 4, Fast-forward sync.
+      // Exact Java signature verified on the published Android 0.5.69 classes.jar.
+      Objectify<Boolean> aborter = FastforwardKt.fastForward(wallet, message -> {
+        progress.accept(message);
+        return Unit.INSTANCE;
+      });
+      // Same documented pattern: aborter.obj = true, cooperative cancellation only.
+      return () -> aborter.setObj(true);
     }
   }
 }
