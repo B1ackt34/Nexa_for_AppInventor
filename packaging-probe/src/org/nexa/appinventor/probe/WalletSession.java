@@ -9,6 +9,7 @@ final class WalletSession {
     Boolean unlock(String passphrase);
     void lock();
     String currentTestnetAddress();
+    WalletBalance balance();
   }
 
   interface Storage {
@@ -111,6 +112,12 @@ final class WalletSession {
     }
     // Cached public destination from the last successful create/open; no key unlock.
     return address;
+  }
+
+  synchronized WalletBalance balance() {
+    requireOpen();
+    // Read-only: does not unlock, save, derive a new address or broadcast.
+    return handle.balance();
   }
 
   private void requireOpen() {

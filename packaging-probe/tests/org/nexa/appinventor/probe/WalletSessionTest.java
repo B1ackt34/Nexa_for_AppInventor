@@ -19,19 +19,29 @@ public final class WalletSessionTest {
     boolean encrypted, locked;
     boolean failSave, checkedFailure;
     int phraseReads;
+    int balanceReads, unlocks, addressReads;
+    RuntimeException balanceFailure;
+    WalletBalance reading = new WalletBalance(0, 0, 0, false, false, -1, -1);
     String password;
     public String recoveryPhrase() { phraseReads++; return "FAKE TEST PHRASE"; }
     public void encrypt(String passphrase) { password = passphrase; encrypted = true; locked = false; }
     public void save() { if (failSave) throw new IllegalStateException("disk failure"); }
     public Boolean unlock(String passphrase) {
+      unlocks++;
       if (!encrypted) return null;
       boolean ok = password.equals(passphrase); locked = !ok; return ok;
     }
     public void lock() { locked = true; }
     public String currentTestnetAddress() {
+      addressReads++;
       if (checkedFailure) return sneaky(new java.io.IOException("checked SDK failure"));
       if (locked) throw new IllegalStateException("locked during derivation");
       return "FAKE TEST ADDRESS";
+    }
+    public WalletBalance balance() {
+      balanceReads++;
+      if (balanceFailure != null) throw balanceFailure;
+      return reading;
     }
     @SuppressWarnings("unchecked")
     private static <T extends Throwable> String sneaky(Throwable t) throws T { throw (T) t; }
@@ -117,6 +127,62 @@ public final class WalletSessionTest {
       FakeStorage storage = new FakeStorage();
       expect("PASSPHRASE_REQUIRED", () -> new WalletSession(storage).create("short"));
       check(storage.creates == 0 && !storage.exists);
+    });
+    test("balance is unavailable before a wallet is open", () -> {
+      FakeStorage storage = new FakeStorage();
+      expect("WALLET_NOT_OPEN", () -> new WalletSession(storage).balance());
+      check(storage.wallet.balanceReads == 0);
+    });
+    test("balance reads do not unlock keys, show phrase or derive another address", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password);
+      int phrases = storage.wallet.phraseReads, addresses = storage.wallet.addressReads;
+      session.balance();
+      check(storage.wallet.locked && storage.wallet.unlocks == 0);
+      check(storage.wallet.phraseReads == phrases && storage.wallet.addressReads == addresses);
+    });
+    test("all Long digits survive conversion to NEXA text", () -> {
+      WalletBalance balance = new WalletBalance(Long.MAX_VALUE, 9007199254740993L,
+          Long.MIN_VALUE, true, true, Long.MAX_VALUE, Long.MAX_VALUE);
+      check(balance.total.equals("92233720368547758.07"));
+      check(balance.confirmed.equals("90071992547409.93"));
+      check(balance.unconfirmed.equals("-92233720368547758.08"));
+      check(balance.syncedHeight.equals("9223372036854775807"));
+    });
+    test("minor units convert exactly at the Nexa 100-sat scale", () -> {
+      WalletBalance balance = new WalletBalance(1, 100, -1, false, false, -1, 0);
+      check(balance.total.equals("0.01") && balance.confirmed.equals("1.00"));
+      check(balance.unconfirmed.equals("-0.01") && balance.syncedHeight.equals("-1"));
+    });
+    test("SDK totals are not recomputed from other readings", () -> {
+      WalletBalance balance = new WalletBalance(700, 500, 50, true, true, 1, 1);
+      check(balance.total.equals("7.00") && balance.confirmed.equals("5.00"));
+      check(balance.unconfirmed.equals("0.50"));
+    });
+    test("offline and unsynced zero retains its incomplete-state flags", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); WalletBalance balance = session.balance();
+      check(balance.total.equals("0.00") && !balance.connected && !balance.synced);
+      check(balance.chainHeight.equals("-1"));
+    });
+    test("repeated balance calls read fresh backend values", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); WalletBalance first = session.balance();
+      storage.wallet.reading = new WalletBalance(12345, 12000, 345, true, true, 10, 10);
+      WalletBalance second = session.balance();
+      check(first.total.equals("0.00") && second.total.equals("123.45"));
+      check(second.synced && second.connected && storage.wallet.balanceReads == 2);
+    });
+    test("balance failure never becomes a fabricated zero or a new wallet", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); storage.wallet.balanceFailure = new IllegalStateException("read failure");
+      try { session.balance(); throw new AssertionError(); }
+      catch (IllegalStateException expected) { check(storage.creates == 1 && storage.wallet.locked); }
+    });
+    test("failed unlock also revokes access to balances", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); expect("INVALID_PASSPHRASE", () -> session.open("wrong-passphrase"));
+      expect("WALLET_NOT_OPEN", session::balance); check(storage.wallet.balanceReads == 0);
     });
     System.out.println("Passed: " + passed + "; Android/Nexa execution is not covered by these tests.");
   }

@@ -14,9 +14,9 @@ import org.nexa.libnexakotlin.LibnexaandroidKt;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Experimental testnet wallet. No mainnet, import, balance or sending operations. */
-@Extension(description = "Experimental Nexa testnet wallet: create, reopen and read its receive address.")
-@DesignerComponent(version = 3, description = "Experimental Nexa testnet wallet",
+/** Experimental testnet wallet. No mainnet, private-key import or sending operations. */
+@Extension(description = "Experimental Nexa testnet wallet: create, reopen, address, balance and sync status.")
+@DesignerComponent(version = 4, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
 public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
@@ -149,6 +149,16 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
     });
   }
 
+  @SimpleFunction(description = "Read balances and sync state asynchronously. Amounts are exact NEXA text with 2 decimal places. Requires an open wallet.")
+  public void GetBalance() {
+    walletOperation("GetBalance", () -> {
+      WalletBalance balance = walletSession().balance();
+      form.runOnUiThread(() -> BalanceReceived(balance.total, balance.confirmed,
+          balance.unconfirmed, balance.synced, balance.connected,
+          balance.syncedHeight, balance.chainHeight));
+    });
+  }
+
   @SimpleEvent(description = "New encrypted testnet wallet created. Show recoveryPhrase privately once for backup; never log or transmit it.")
   public void WalletCreated(String recoveryPhrase) {
     EventDispatcher.dispatchEvent(this, "WalletCreated", recoveryPhrase);
@@ -163,6 +173,13 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
   @SimpleEvent(description = "Public testnet receive address from the last create/open.")
   public void AddressReceived(String address) {
     EventDispatcher.dispatchEvent(this, "AddressReceived", address);
+  }
+
+  @SimpleEvent(description = "Balances in NEXA text (2 decimals), sync flag, P2P connection flag and block heights as text. Unsynced/offline values may be incomplete or stale; not a spendable balance guarantee.")
+  public void BalanceReceived(String total, String confirmed, String unconfirmed,
+      boolean synced, boolean connected, String syncedHeight, String chainHeight) {
+    EventDispatcher.dispatchEvent(this, "BalanceReceived", total, confirmed,
+        unconfirmed, synced, connected, syncedHeight, chainHeight);
   }
 
   @SimpleEvent(description = "Wallet operation failed. Does not include the passphrase or recovery phrase.")

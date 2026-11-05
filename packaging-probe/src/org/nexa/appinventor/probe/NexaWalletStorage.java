@@ -88,5 +88,21 @@ final class NexaWalletStorage implements WalletSession.Storage {
       // PayAddress string rendering also appears in nexa-ktor-server-integration/SKILL.md.
       return address.toString();
     }
+
+    public WalletBalance balance() {
+      // nexa-transaction-construction/SKILL.md, pattern 4: refresh cached balances.
+      wallet.clearCachedBalances();
+      // nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 4: Long values in sat.
+      long total = wallet.getBalance();
+      long confirmed = wallet.getBalanceConfirmed();
+      long unconfirmed = wallet.getBalanceUnconfirmed();
+      boolean synced = wallet.synced(-1L);
+      long syncedHeight = wallet.getSyncedHeight();
+      long chainHeight = wallet.getBlockchain().getCurHeight();
+      // Same skill, Connectivity checks: a P2P peer is connectivity, not finality.
+      boolean connected = !wallet.getBlockchain().getNet().getP2pCnxns().isEmpty();
+      return new WalletBalance(total, confirmed, unconfirmed, synced, connected,
+          syncedHeight, chainHeight);
+    }
   }
 }

@@ -351,3 +351,35 @@ Importazione wallet da chiave, saldo e invio non implementati.
 
 AIX 0.0.3: 13.729.088 byte; SHA256
  afce4ea5d0d77d28a78fbe76a27188cc88e47d07dbda460349224ba641898ead.
+
+
+## Versione 0.0.4 — GetBalance testnet (2026-11-05)
+
+L'utente ha confermato il funzionamento della 0.0.3 sullo smartphone, inclusa
+riapertura e persistenza. La 0.0.4 conserva DB, nome componente e blocchi esistenti.
+Aggiunge GetBalance e BalanceReceived(total, confirmed, unconfirmed, synced,
+connected, syncedHeight, chainHeight). Lettura seriale su worker, evento UI.
+
+Fonti fissate al corpus 3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24:
+wallet lifecycle pattern 4 per balance/balanceConfirmed/balanceUnconfirmed,
+synced(-1), syncedHeight e blockchain.curHeight; stessa skill Connectivity checks
+per net.p2pCnxns. Transaction construction pattern 4 per clearCachedBalances,
+Mental model per 1 NEXA=100 sat. Tutte le firme Java verificate con javap su
+0.5.69. Nessuna nuova libreria o API extra-corpus.
+
+Saldi convertiti da Long a BigDecimal scala 2 e poi testo, senza double/float;
+altezze in testo per conservare precisione e sentinelle dell'SDK. Non si assume
+che letture successive costituiscano uno snapshot atomico né che il totale
+sia ricostruibile dagli altri due campi. Non vengono sbloccate chiavi o forzate
+richieste remote. Flag offline/unsynced conservati anche con zero. Le eccezioni
+restano WalletFailed, non sono convertite in saldo zero.
+
+21 test controller/formattazione con backend finti superati, compresi precisione
+oltre 2^53, estremi Long, unità minime, segni, flags, letture aggiornate, errori e
+assenza di unlock/derivazione/frase nel percorso saldo. Non provano i valori reali
+Nexa su Android. Build Rush completa (javac, R8, D8) e controlli ZIP/JSON/JNI,
+blocchi e limite 5 MiB superati. Per la funzione nuova rimane la prova dispositivo.
+
+AIX 0.0.4: 13.733.623 byte, massimo file interno 3.276.061 byte.
+SHA256 43c491760fb966ddd868b63845ef9791bcd2c65269cf6a3c8c2296cefaf620fc.
+SendNexa e importazione chiave privata rimangono non implementate.

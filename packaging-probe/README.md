@@ -1,8 +1,8 @@
-# NexaPackagingProbe 0.0.3 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.4 — wallet testnet sperimentale
 
 Estensione Java per MIT App Inventor 2 con Nexa Android 0.5.69. Il nome del
 componente resta NexaPackagingProbe per aggiornare i blocchi delle versioni precedenti.
-Solo testnet; nessuna funzione mainnet, saldo, invio o importazione chiave privata.
+Solo testnet; nessuna funzione mainnet, invio o importazione chiave privata.
 
 ## Blocchi disponibili
 
@@ -13,6 +13,7 @@ Solo testnet; nessuna funzione mainnet, saldo, invio o importazione chiave priva
 | OpenWallet(passphrase) | WalletOpened; non crea mai un nuovo wallet |
 | ConfirmBackup() | BackupConfirmed; registra la conferma dell'utente |
 | GetAddress() | AddressReceived(address), dopo creazione/apertura e conferma backup |
+| GetBalance() | BalanceReceived(total, confirmed, unconfirmed, synced, connected, syncedHeight, chainHeight) |
 
 Gli errori wallet arrivano a WalletFailed(operation, code, message). Ogni richiesta
 viene serializzata su un worker; gli eventi sono emessi sul thread UI.
@@ -24,7 +25,7 @@ non implica chiavi sbloccate o sincronizzazione della blockchain completata.
 
 ## Prima creazione sul dispositivo
 
-1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.3.aix`.
+1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.4.aix`.
 2. Aggiungere un PasswordTextBox, una Label privata per la frase, una Label per
    l'indirizzo e pulsanti Crea, Conferma backup e Indirizzo.
 3. Da Crea.Click chiamare CreateWallet con il testo della PasswordTextBox.
@@ -101,20 +102,76 @@ Rush v206 usa compile SDK 36; min_sdk=29 (Android 10).
    Il lock include l'alias metadata kotlin-stdlib-common richiesto da Gradle.
 2. In questa directory: `rush deps sync` e `rush build`.
 3. `python3 tools/compat_aix.py`
-4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.3.aix`
+4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.4.aix`
 
 Usare proxy e CA della sessione. Non disattivare TLS o controlli di integrità.
 original_names preserva i nomi Nexa richiesti da JNI. Il postprocessore mantiene
 ogni file interno sotto 5 MiB per i server MIT precedenti alla correzione
 b097193903890d6aa729ac52464ae342d3a600e2. Mantiene i payload delle classi, DEX e
 librerie native invariati, registrando i JAR aggiuntivi nei build metadata MIT.
-La versione 0.0.2 è stata importata con successo dall'utente; la nuova 0.0.3
-richiede nuova compilazione APK e prova dispositivo. Non usare il Companion con AAR.
+La 0.0.2 è stata importata con successo e l'utente ha confermato creazione, indirizzo
+e riapertura della 0.0.3 sullo smartphone. La lettura saldo della 0.0.4 richiede
+nuova compilazione APK e prova dispositivo. Non usare il Companion con AAR.
 
 ## Verifiche automatizzate del ciclo di vita
 
-Compilare WalletSession.java e tests/org/nexa/appinventor/probe/WalletSessionTest.java
+Compilare WalletSession.java, WalletBalance.java e tests/org/nexa/appinventor/probe/WalletSessionTest.java
 con javac --release 17 in una directory esterna, poi eseguire
 org.nexa.appinventor.probe.WalletSessionTest. I test usano backend finti per provare
 le regole di non sovrascrittura, password, backup e blocco chiavi. Non simulano
 la correttezza del database Nexa, la cifratura effettiva o la rete Android.
+
+
+## Saldo e sincronizzazione (0.0.4)
+
+Aggiornare l'estensione nel progetto esistente e ricompilare/installare l'APK come
+aggiornamento: non disinstallare e non cancellare i dati. Usare OpenWallet con la
+passphrase esistente. Da WalletOpened o da un pulsante chiamare GetBalance.
+
+Nell'evento BalanceReceived:
+
+| Parametro | Tipo | Significato |
+| --- | --- | --- |
+| total | testo | Saldo totale riportato dall'SDK, in NEXA con due decimali |
+| confirmed | testo | Saldo confermato riportato dall'SDK, in NEXA |
+| unconfirmed | testo | Saldo non confermato riportato dall'SDK, in NEXA |
+| synced | booleano | Esito SDK synced(-1), non garanzia di finalità |
+| connected | booleano | Presenza di almeno una connessione P2P al momento della lettura |
+| syncedHeight | testo | Altezza sincronizzata del wallet fornita dall'SDK |
+| chainHeight | testo | Altezza corrente della catena fornita dall'SDK |
+
+Per la prima prova mostrare total, confirmed, unconfirmed, synced e connected
+nelle Label. Esempio: 12345 sat diventano il testo `123.45` NEXA; 1 sat diventa
+`0.01`, zero `0.00`. La scala deriva dalla skill Nexa: 1 NEXA = 100 sat.
+Non vengono usati double/float e non vengono ricalcolati i totali dell'SDK.
+Per mantenere la precisione non convertire questi testi in numeri App Inventor
+prima di mostrarli. I valori sono letture successive, non uno snapshot atomico;
+non sono una promessa di saldo spendibile o finale.
+
+GetBalance invalida la cache documentata e legge lo stato locale monitorato dal
+wallet. Non forza una richiesta remota né attende la sincronizzazione e non
+sblocca le chiavi. I valori offline possono essere precedenti alla disconnessione;
+quelli durante la scansione possono essere incompleti. Si restituiscono i flag
+anche se gli importi sono zero, senza fingere uno stato pronto.
+Un errore arriva a WalletFailed, mai come saldo zero inventato.
+
+Per seguire la sincronizzazione si può aggiungere un Clock con intervallo 5000 ms:
+se WalletOpen è vero chiamare GetBalance, evitando altre azioni in parallelo.
+La coda delle operazioni resta seriale; nessun polling automatico è aggiunto
+all'estensione. Gli errori conservano il nome operazione GetBalance.
+
+Fonti aggiuntive:
+
+- nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 4: balance, balanceConfirmed,
+  balanceUnconfirmed, synced(-1), syncedHeight, blockchain.curHeight.
+- Stessa skill, Connectivity checks: blockchain.net.p2pCnxns.
+- [Transaction construction, pattern 4 e Mental model](https://gitlab.com/nexa/nexaaiskills/-/blob/3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24/skills/nexa-transaction-construction/SKILL.md):
+  CommonWallet.clearCachedBalances e scala 100 sat per NEXA.
+
+Firme Java verificate con javap nell'artefatto 0.5.69: clearCachedBalances(),
+getBalance(), getBalanceConfirmed(), getBalanceUnconfirmed(), synced(long),
+getSyncedHeight(), getBlockchain().getCurHeight(), getNet().getP2pCnxns().
+La formattazione BigDecimal è codice Java applicativo, non un'API Nexa nuova.
+
+21 test del controller/formattazione superati con backend finti. Cifratura, DB,
+rete e valori reali del saldo su Android richiedono la prova del nuovo APK.

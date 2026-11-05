@@ -1,7 +1,7 @@
-# NexaPackagingProbe 0.0.3 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.4 — wallet testnet sperimentale
 
-Scaricare **NexaPackagingProbe-0.0.3.aix** e aggiornare l'estensione nel progetto
-App Inventor. Le versioni 0.0.1 e 0.0.2 restano solo come riferimento.
+Scaricare **NexaPackagingProbe-0.0.4.aix** e aggiornare l'estensione nel progetto
+App Inventor. Le versioni precedenti restano solo come riferimento.
 
 ## Funzioni
 
@@ -10,6 +10,7 @@ App Inventor. Le versioni 0.0.1 e 0.0.2 restano solo come riferimento.
 - OpenWallet(passphrase): riapre il wallet salvato, senza ricrearlo su errore.
 - ConfirmBackup(): conferma esplicita di aver registrato la frase di recupero.
 - GetAddress(): evento AddressReceived(address), dopo conferma backup.
+- GetBalance(): BalanceReceived con saldi NEXA esatti, sincronizzazione, connessione e altezze.
 
 In WalletCreated(recoveryPhrase) mostrare la frase soltanto sul dispositivo e
 registrarla privatamente; poi confermare il backup e cancellarla dalla Label.
@@ -19,10 +20,18 @@ Errori: WalletFailed(operation, code, message).
 
 ## Stato delle verifiche
 
-12 test desktop sulle regole di persistenza/non sovrascrittura superati. Build
-Rush, D8, controlli ZIP/JSON, descrittori e JNI superati. Il DB/cifratura/rete reali
-su Android richiedono ancora la prova della versione 0.0.3 sul dispositivo.
+21 test desktop sulle regole di persistenza/non sovrascrittura superati. Build
+Rush, D8, controlli ZIP/JSON, descrittori e JNI superati. L'utente ha confermato creazione, indirizzo e riapertura della 0.0.3 sul
+dispositivo. I valori reali e la sincronizzazione della nuova GetBalance richiedono
+la prova della 0.0.4.
 Solo Android 10+ e APK compilato, non Companion. Non è un wallet di produzione.
+
+Aggiornare lo stesso progetto App Inventor e installare l'APK come aggiornamento,
+senza disinstallare o cancellare i dati. Dopo OpenWallet, chiamare GetBalance.
+BalanceReceived(total, confirmed, unconfirmed, synced, connected, syncedHeight,
+chainHeight) usa testo in NEXA con due decimali per i tre saldi, booleani per i
+flag e testo per le altezze. Offline o prima della sincronizzazione il saldo
+può essere precedente o incompleto. Errori in WalletFailed, mai uno zero fittizio.
 
 ## Packaging
 
