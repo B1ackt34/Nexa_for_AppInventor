@@ -22,6 +22,8 @@ public final class WalletSessionTest {
   }
   private static final class FakeHandle implements WalletSession.Handle {
     boolean encrypted, locked, connected;
+    boolean ignoreLock;
+    Runnable afterUnlock = () -> { }, afterSave = () -> { }, afterConnect = () -> { };
     int connects;
     RuntimeException connectFailure;
     boolean failSave, checkedFailure;
@@ -36,18 +38,19 @@ public final class WalletSessionTest {
     String password;
     public String recoveryPhrase() { phraseReads++; return "FAKE TEST PHRASE"; }
     public void encrypt(String passphrase) { password = passphrase; encrypted = true; locked = false; }
-    public void save() { if (failSave) throw new IllegalStateException("disk failure"); }
+    public void save() { if (failSave) throw new IllegalStateException("disk failure"); afterSave.run(); }
     public Boolean unlock(String passphrase) {
       unlocks++;
       if (!encrypted) return null;
-      boolean ok = password.equals(passphrase); locked = !ok; return ok;
+      boolean ok = password.equals(passphrase); locked = !ok; afterUnlock.run(); return ok;
     }
-    public void lock() { locked = true; }
+    public void lock() { if (!ignoreLock) locked = true; }
+    public Boolean lockedState() { return encrypted ? locked : null; }
     public void connect() {
       connects++;
       if (locked) throw new IllegalStateException("keys required to attach chain");
       if (connectFailure != null) throw connectFailure;
-      connected = true;
+      connected = true; afterConnect.run();
     }
     public String currentTestnetAddress() {
       addressReads++;
@@ -363,6 +366,74 @@ public final class WalletSessionTest {
         check(!expected.getMessage().contains("sensitive SDK text"));
       }
       check(storage.wallet.locked && !restarted.isOpen() && storage.creates == 1);
+    });
+    test("background invalidates access before asynchronous key lock completes", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); long ticket = session.invalidateAccess();
+      check(!session.isOpen()); expect("WALLET_NOT_OPEN", session::balance);
+      session.completeLock(ticket); check(storage.wallet.locked);
+      session.open(password); session.completeLock(ticket); check(session.isOpen());
+    });
+    test("pause during unlock relocks and cannot publish an open session", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); storage.wallet.afterUnlock = session::invalidateAccess;
+      expect("SESSION_LOCKED", () -> session.open(password));
+      check(storage.wallet.locked && !session.isOpen() && storage.wallet.connects == 0);
+    });
+    test("pause during chain attachment relocks without replacing wallet", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); storage.wallet.afterConnect = session::invalidateAccess;
+      expect("SESSION_LOCKED", () -> session.open(password));
+      check(storage.wallet.locked && !session.isOpen() && storage.creates == 1);
+    });
+    test("interrupted creation persists encryption then suppresses secret result", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      storage.wallet.afterSave = session::invalidateAccess;
+      expect("SESSION_LOCKED", () -> session.create(password));
+      check(storage.wallet.encrypted && storage.wallet.locked && !session.isOpen());
+      expect("WALLET_EXISTS", () -> session.create(password));
+    });
+    test("unconfirmed SDK lock fails closed and prohibits another unlock", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password); storage.wallet.ignoreLock = true;
+      expect("LOCK_NOT_CONFIRMED", () -> session.open(password));
+      int unlocks = storage.wallet.unlocks;
+      expect("LOCK_NOT_CONFIRMED", () -> session.open(password));
+      check(!session.isOpen() && storage.wallet.unlocks == unlocks);
+    });
+    test("background fast sync requests abort and retains guard until terminal", () -> {
+      FastFixture f = new FastFixture(); f.start();
+      f.session.completeLock(f.session.invalidateAccess());
+      check(f.storage.wallet.locked && f.storage.wallet.aborts == 1 && !f.session.isOpen());
+      expect("FAST_SYNC_RUNNING", () -> f.session.open(password));
+      f.finish(false, 100); check(!f.session.fastSyncRunning() && f.listener.results.isEmpty());
+      f.session.open(password); check(f.session.isOpen());
+    });
+    test("unfinished backup can be recovered only after password authentication", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession session = new WalletSession(storage);
+      session.create(password);
+      expect("INVALID_PASSPHRASE", () -> session.showRecoveryPhrase("incorrect-passphrase", () -> true));
+      check(storage.wallet.locked);
+      check(session.showRecoveryPhrase(password, () -> true).equals("FAKE TEST PHRASE"));
+      check(storage.wallet.locked); session.confirmBackup();
+      expect("BACKUP_ALREADY_CONFIRMED", () -> session.showRecoveryPhrase(password, () -> true));
+    });
+    test("cancelled queued credential is released and never executed", () -> {
+      ForegroundGate gate = new ForegroundGate(); int[] runs = {0};
+      GuardedRequest request = new GuardedRequest(gate, password, r -> runs[0]++, r -> { });
+      check(request.retainsSecret()); gate.pause(); request.cancel(); gate.resume(); request.run();
+      check(!request.retainsSecret() && runs[0] == 0 && !request.valid());
+    });
+    test("pause and resume do not revive old callback generations", () -> {
+      ForegroundGate gate = new ForegroundGate(); long token = gate.capture();
+      check(gate.current(token)); gate.pause(); gate.resume(); check(!gate.current(token));
+      GuardedRequest fresh = new GuardedRequest(gate, password, r -> check(r.secret().equals(password)), r -> { });
+      fresh.run(); check(!fresh.retainsSecret());
+    });
+    test("revocation during FastSync unlock never hands keys to SDK search", () -> {
+      FastFixture f = new FastFixture(); f.storage.wallet.afterUnlock = f.session::invalidateAccess;
+      expect("SESSION_LOCKED", f::start);
+      check(f.storage.wallet.locked && f.storage.wallet.fastStarts == 0 && !f.session.isOpen());
     });
     System.out.println("Passed: " + passed + "; Android/Nexa execution is not covered by these tests.");
   }

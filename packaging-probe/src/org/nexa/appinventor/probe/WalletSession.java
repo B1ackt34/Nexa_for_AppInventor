@@ -1,6 +1,8 @@
 package org.nexa.appinventor.probe;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
 
 /** App-owned lifecycle rules; no Nexa API is invented by this abstraction. */
@@ -11,6 +13,7 @@ final class WalletSession {
     void save();
     Boolean unlock(String passphrase);
     void lock();
+    Boolean lockedState();
     void connect();
     String currentTestnetAddress();
     WalletBalance balance();
@@ -73,6 +76,53 @@ final class WalletSession {
   private Handle handle;
   private volatile String address;
   private volatile FastAttempt fastAttempt;
+  private final AtomicLong epoch = new AtomicLong();
+  private volatile long handledEpoch;
+  private volatile boolean lockBlocked;
+
+  long invalidateAccess() {
+    long ticket = epoch.incrementAndGet();
+    address = null;
+    return ticket;
+  }
+
+  synchronized void completeLock(long ticket) {
+    if (ticket != epoch.get() || ticket == handledEpoch) return;
+    address = null;
+    FastAttempt attempt = fastAttempt;
+    if (attempt != null) {
+      attempt.failed = true;
+      attempt.cancelled = true;
+      attempt.cancelWatchdog.run();
+      try { attempt.abort.run(); } catch (Exception | LinkageError ignored) { }
+    }
+    if (handle != null) lockKeys();
+    handledEpoch = ticket;
+  }
+
+  private void prepare() {
+    if (lockBlocked) throw new Failure("LOCK_NOT_CONFIRMED", "Key locking was not confirmed. Stop the app process.");
+    completeLock(epoch.get());
+  }
+
+  private void lockKeys() {
+    try {
+      handle.lock();
+      // nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 6.
+      if (!Boolean.TRUE.equals(handle.lockedState())) throw new IllegalStateException();
+    } catch (Exception | LinkageError failure) {
+      lockBlocked = true;
+      address = null;
+      throw new Failure("LOCK_NOT_CONFIRMED", "Key locking was not confirmed. Stop the app process.");
+    }
+  }
+
+  private void checkpoint(long ticket, BooleanSupplier permitted) {
+    if (epoch.get() != ticket || !permitted.getAsBoolean()) {
+      address = null;
+      throw new Failure("SESSION_LOCKED", "Session access was revoked. Return to the app and reopen the wallet.");
+    }
+  }
 
   WalletSession(Storage storage) {
     this.storage = storage;
@@ -84,7 +134,12 @@ final class WalletSession {
     }
   }
 
-  synchronized String create(String passphrase) {
+  synchronized String create(String passphrase) { return create(passphrase, () -> true); }
+
+  synchronized String create(String passphrase, BooleanSupplier permitted) {
+    prepare();
+    long ticket = epoch.get();
+    checkpoint(ticket, permitted);
     requireNoFastSync();
     requirePassphrase(passphrase);
     if (handle != null || storage.exists()) {
@@ -99,18 +154,25 @@ final class WalletSession {
       String phrase = handle.recoveryPhrase();
       handle.encrypt(passphrase);
       handle.save();
+      checkpoint(ticket, permitted);
       String candidate = handle.currentTestnetAddress();
-      handle.lock();
+      lockKeys();
+      checkpoint(ticket, permitted);
       address = candidate;
       return phrase;
     } catch (Exception | LinkageError failure) {
       address = null;
-      try { handle.lock(); } catch (Exception | LinkageError ignored) { }
+      try { lockKeys(); } catch (Exception | LinkageError ignored) { }
       throw failure;
     }
   }
 
-  synchronized void open(String passphrase) {
+  synchronized void open(String passphrase) { open(passphrase, () -> true); }
+
+  synchronized void open(String passphrase, BooleanSupplier permitted) {
+    prepare();
+    long ticket = epoch.get();
+    checkpoint(ticket, permitted);
     requireNoFastSync();
     requirePassphrase(passphrase);
     address = null;
@@ -124,6 +186,7 @@ final class WalletSession {
         // Keep the handle for password retries without reopening the same DB.
         handle = storage.open();
       }
+      checkpoint(ticket, permitted);
       phase = "UNLOCK";
       Boolean unlocked = handle.unlock(passphrase);
       if (unlocked == null) {
@@ -132,17 +195,20 @@ final class WalletSession {
       if (!unlocked) {
         throw new Failure("INVALID_PASSPHRASE", "The passphrase is incorrect.");
       }
+      checkpoint(ticket, permitted);
       phase = "CONNECT_CHAIN";
       handle.connect();
+      checkpoint(ticket, permitted);
       phase = "READ_ADDRESS";
       String candidate = handle.currentTestnetAddress();
       phase = "RELOCK";
-      handle.lock();
+      lockKeys();
+      checkpoint(ticket, permitted);
       address = candidate;
     } catch (Exception | LinkageError failure) {
       address = null;
       if (handle != null) {
-        try { handle.lock(); } catch (Exception | LinkageError ignored) { }
+        try { lockKeys(); } catch (Exception | LinkageError ignored) { }
       }
       if (failure instanceof Failure) throw (Failure) failure;
       // Expose only the operation stage and exception type, not SDK text/secrets.
@@ -152,7 +218,27 @@ final class WalletSession {
   }
 
   boolean isOpen() {
-    return address != null;
+    return address != null && handledEpoch == epoch.get() && !lockBlocked;
+  }
+
+  synchronized String showRecoveryPhrase(String passphrase, BooleanSupplier permitted) {
+    prepare();
+    requireNoFastSync();
+    requireOpen();
+    if (storage.backupConfirmed()) throw new Failure("BACKUP_ALREADY_CONFIRMED", "Recovery display is available only until initial backup confirmation.");
+    requirePassphrase(passphrase);
+    long ticket = epoch.get();
+    checkpoint(ticket, permitted);
+    try {
+      if (!Boolean.TRUE.equals(handle.unlock(passphrase))) throw new Failure("INVALID_PASSPHRASE", "The passphrase is incorrect.");
+      checkpoint(ticket, permitted);
+      String phrase = handle.recoveryPhrase();
+      lockKeys();
+      checkpoint(ticket, permitted);
+      return phrase;
+    } finally {
+      lockKeys();
+    }
   }
 
   synchronized void confirmBackup() {
@@ -179,6 +265,14 @@ final class WalletSession {
 
   synchronized void fastSync(String passphrase, Executor callbacks, Watchdog watchdog,
       FastSyncListener listener) {
+    fastSync(passphrase, callbacks, watchdog, listener, () -> true);
+  }
+
+  synchronized void fastSync(String passphrase, Executor callbacks, Watchdog watchdog,
+      FastSyncListener listener, BooleanSupplier permitted) {
+    prepare();
+    long ticket = epoch.get();
+    checkpoint(ticket, permitted);
     requireNoFastSync();
     requireOpen();
     requirePassphrase(passphrase);
@@ -194,13 +288,16 @@ final class WalletSession {
     FastAttempt attempt = new FastAttempt(height, listener);
     fastAttempt = attempt;
     try {
+      checkpoint(ticket, permitted);
       Boolean unlocked = handle.unlock(passphrase);
+      checkpoint(ticket, permitted);
       if (unlocked == null) throw new Failure("WALLET_NOT_ENCRYPTED", "The wallet must be encrypted.");
       if (!unlocked) throw new Failure("INVALID_PASSPHRASE", "The passphrase is incorrect.");
       // SDK fastForward is asynchronous. Keep keys available until its terminal callback.
       attempt.handedOff = true;
       attempt.abort = handle.startFastSync(message -> callbacks.execute(
           () -> fastSyncProgress(attempt, message)));
+      checkpoint(ticket, permitted);
       // Also safe when a test/backend delivers a terminal callback synchronously.
       if (fastAttempt == attempt) {
         attempt.cancelWatchdog = watchdog.schedule(() -> fastSyncTimeout(attempt));
@@ -213,7 +310,7 @@ final class WalletSession {
         attempt.failed = true;
         try { attempt.abort.run(); } catch (Exception | LinkageError ignored) { }
       }
-      try { handle.lock(); }
+      try { lockKeys(); }
       catch (Exception | LinkageError lockFailure) {
         attempt.failed = true;
         throw new Failure("FAST_SYNC_LOCK_FAILED", "Fast sync could not relock keys. Stop the app process.");
@@ -236,13 +333,13 @@ final class WalletSession {
     try {
       // "finished" means the search ended, including on failure; never call it success.
       WalletBalance after = attempt.failed ? null : handle.balance();
-      handle.lock();
+      lockKeys();
       fastAttempt = null;
       if (!attempt.failed) {
         attempt.listener.finished(new FastSyncResult(attempt.before, after, attempt.cancelled));
       }
     } catch (Exception | LinkageError failure) {
-      try { handle.lock(); } catch (Exception | LinkageError ignored) { }
+      try { lockKeys(); } catch (Exception | LinkageError ignored) { }
       // Retain the guard if cleanup failed; do not start another SDK search on this handle.
       attempt.failed = true;
       attempt.listener.failed("FAST_SYNC_CLEANUP_FAILED", "Fast sync ended but cleanup failed. Restart the app process.");
@@ -267,7 +364,7 @@ final class WalletSession {
     try { attempt.abort.run(); } catch (Exception | LinkageError ignored) { }
     String code = "FAST_SYNC_TIMEOUT";
     String message = "Fast sync exceeded five minutes. Stop requested and keys relocked. Restart the app process if it remains busy.";
-    try { handle.lock(); }
+    try { lockKeys(); }
     catch (Exception | LinkageError failure) {
       code = "FAST_SYNC_LOCK_FAILED";
       message = "Fast sync timed out and key relocking failed. Stop the app process.";
@@ -283,7 +380,7 @@ final class WalletSession {
   }
 
   private void requireOpen() {
-    if (address == null) {
+    if (!isOpen()) {
       throw new Failure("WALLET_NOT_OPEN", "Create or open the testnet wallet first.");
     }
   }

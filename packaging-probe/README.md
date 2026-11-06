@@ -1,4 +1,4 @@
-# NexaPackagingProbe 0.0.6 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.7 — wallet testnet sperimentale
 
 Estensione Java per MIT App Inventor 2 con Nexa Android 0.5.69. Il nome del
 componente resta NexaPackagingProbe per aggiornare i blocchi delle versioni precedenti.
@@ -16,19 +16,21 @@ Solo testnet; nessuna funzione mainnet, invio o importazione chiave privata.
 | GetBalance() | BalanceReceived(total, confirmed, unconfirmed, synced, connected, syncedHeight, chainHeight) |
 | FastSync(passphrase) | FastSyncProgress e FastSyncFinished; errori in WalletFailed |
 | CancelFastSync() | Richiesta di arresto cooperativo, non completamento immediato |
+| LockWallet() | Revoca accesso; SessionLocked(reason), blocco chiavi asincrono |
+| ShowRecoveryPhrase(passphrase) | RecoveryPhraseReady(recoveryPhrase), solo backup iniziale non confermato |
 
 Gli errori wallet arrivano a WalletFailed(operation, code, message). Ogni richiesta
 viene serializzata su un worker; gli eventi sono emessi sul thread UI.
 Le funzioni wallet inizializzano automaticamente la libreria se necessario.
 
 Proprietà di sola lettura: Initialized, Network (sempre `testnet`), WalletOpen,
-FastSyncRunning.
+FastSyncRunning, ScreenProtected.
 WalletOpen significa che l'indirizzo pubblico è stato preparato in questo processo:
 non implica chiavi sbloccate o sincronizzazione della blockchain completata.
 
 ## Prima creazione sul dispositivo
 
-1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.6.aix`.
+1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.7.aix`.
 2. Aggiungere un PasswordTextBox, una Label privata per la frase, una Label per
    l'indirizzo e pulsanti Crea, Conferma backup e Indirizzo.
 3. Da Crea.Click chiamare CreateWallet con il testo della PasswordTextBox.
@@ -119,9 +121,9 @@ nuova compilazione APK e prova dispositivo. Non usare il Companion con AAR.
 
 ## Verifiche automatizzate del ciclo di vita
 
-Compilare WalletSession.java, WalletBalance.java e tests/org/nexa/appinventor/probe/WalletSessionTest.java
-con javac --release 17 in una directory esterna, poi eseguire
-org.nexa.appinventor.probe.WalletSessionTest. I test usano backend finti per provare
+Eseguire `tools/test_wallet_session.sh` con un JDK completo (JAVA_HOME): compila
+con javac --release 17 il controller, il gate, le richieste e i test in una
+directory temporanea, poi esegue WalletSessionTest e rimuove i file temporanei. I test usano backend finti per provare
 le regole di non sovrascrittura, password, backup e blocco chiavi. Non simulano
 la correttezza del database Nexa, la cifratura effettiva o la rete Android.
 
@@ -299,3 +301,71 @@ Tutte le firme sono state verificate con javap; nessun metodo SDK inventato.
 la prova del wallet reale ricevuto sul telefono. Per distinguere un problema
 anteriore al collegamento, WalletFailed ora indica READ_DATABASE, UNLOCK,
 CONNECT_CHAIN, READ_ADDRESS o RELOCK, senza riportare il testo grezzo SDK.
+
+
+## Protezioni di sessione — 0.0.7
+
+Il costruttore imposta Android `WindowManager.LayoutParams.FLAG_SECURE` sulla
+Form che contiene il componente. `ScreenProtected` legge il flag effettivo.
+Screenshot e cattura schermo vengono limitati da Android; verificare sul telefono.
+Questo non protegge altre Form, fotocamere esterne, root o codice nello stesso
+processo. Usare una sola istanza del componente sulla Form del wallet; proteggere
+separatamente ogni altra schermata che mostra dati sensibili.
+
+`onPause`/`onStop` revocano l'accesso pubblico, invalidano richieste ed eventi
+precedenti e rimuovono le credenziali dalle richieste ancora in coda. Un worker
+separato richiede `lock()` e controlla `lockedState() == true`. Le operazioni SDK
+in corso devono restituire il controllo: non è garantita una cancellazione o una
+cancellazione della memoria istantanea. La creazione già iniziata completa la
+cifratura/persistenza prima di interrompere il risultato, per non lasciare
+volontariamente un nuovo database non cifrato. Nessun database viene sostituito.
+
+Al ritorno arriva `AuthenticationRequired`: richiedere nuovamente la passphrase e
+chiamare `OpenWallet`. Anche dialoghi, cambio Form e ActivityStarter possono
+causare una pausa. `LockWallet()` applica la stessa revoca manualmente;
+`SessionLocked(reason)` indica la revoca, non prova la cancellazione fisica delle
+chiavi dalla memoria. Se `LOCK_NOT_CONFIRMED`, arrestare completamente il processo
+senza cancellare i dati. La sincronizzazione SPV ordinaria può continuare.
+
+FastSync in background riceve abort cooperativo e blocco chiavi; il guard resta
+attivo fino al callback terminale SDK. Gli eventi del vecchio tentativo sono
+scartati. Se `FastSyncRunning` resta vero, attendere o arrestare il processo prima
+di riaprire. Nessuna ricerca sovrapposta viene avviata.
+
+Dopo WalletCreated/RecoveryPhraseReady, l'estensione individua i TextView della
+Form che contengono l'intera frase durante quell'evento e li svuota al blocco.
+Svuota inoltre i campi Android riconosciuti come password. I blocchi dell'app
+restano responsabili di cancellare variabili, copie successive o riformattate,
+altri widget e clipboard, e non devono salvare segreti in TinyDB, file o log.
+Le String Java/App Inventor non sono azzerabili con garanzie crittografiche.
+
+Se la prima creazione è stata interrotta prima di vedere la frase, riaprire con
+OpenWallet e usare ShowRecoveryPhrase con la stessa passphrase. È un percorso
+applicativo per completare il backup iniziale, disabilitato da ConfirmBackup;
+non è un ripristino e non genera un nuovo wallet. La conferma continua a essere
+una dichiarazione dell'utente, non una verifica automatica delle parole.
+
+API Nexa aggiunta: solo `Bip44Wallet.lockedState()`; fonte primaria
+[nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 6](https://gitlab.com/nexa/nexaaiskills/-/blob/main/skills/nexa-wallet-lifecycle-and-chain/SKILL.md),
+e [recoveryFlow.md, Lock/unlock](https://gitlab.com/nexa/nexaaiskills/-/blob/main/skills/nexa-wallet-lifecycle-and-chain/recoveryFlow.md).
+ShowRecoveryPhrase riutilizza recoverySecret/unlock/lock già citati; la policy di
+backup incompleto e il controllo del ciclo Android sono dell'estensione, non
+nuove funzioni Nexa. Il corpus non documenta una garanzia di zeroizzazione o un
+controllo di backup Android tramite SDK: non vengono inventati.
+
+Restano da risolvere i limiti del SDK già individuati: prima scrittura non
+cifrata durante newWallet, derivazione della password e residui in SQLite/WAL o
+memoria. Il flag backup dell'APK non viene corretto da questa AIX: il manifest
+finale è generato dal build server App Inventor. Questa versione resta testnet.
+
+Verifica: 49 test desktop, inclusi pause durante unlock/aggancio catena, richieste
+annullate, FastSync e postcondizione lock. Non eseguono Android né il vero SDK.
+Build Rush/D8, ZIP/JSON tramite parser MIT, descrittori, JNI e quattro ABI
+verificati sulla AIX; la verifica reale
+di screenshot, lifecycle e riapertura resta da fare sul telefono.
+
+Prova sul dispositivo: aggiornare estensione e APK dello stesso progetto senza
+disinstallare; verificare ScreenProtected e tentare uno screenshot; aprire il
+wallet, passare a Home e tornare; attendere AuthenticationRequired, verificare
+WalletOpen=false e riaprire; controllare indirizzo e saldo. Provare poi la pausa
+durante FastSync. Non condividere screenshot contenenti segreti.

@@ -106,6 +106,11 @@ final class NexaWalletStorage implements WalletSession.Storage {
       return wallet.unlock(passphrase);
     }
 
+    public Boolean lockedState() {
+      // nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 6; recoveryFlow.md.
+      return wallet.lockedState();
+    }
+
     public void lock() {
       // Wallet lifecycle pattern 6: drop the decrypted key when no longer needed.
       wallet.lock();

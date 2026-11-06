@@ -11,7 +11,14 @@ import com.google.appinventor.components.runtime.AndroidNonvisibleComponent;
 import com.google.appinventor.components.runtime.ComponentContainer;
 import com.google.appinventor.components.runtime.EventDispatcher;
 import org.nexa.libnexakotlin.LibnexaandroidKt;
-import java.util.concurrent.ExecutorService;
+import com.google.appinventor.components.runtime.OnPauseListener;
+import com.google.appinventor.components.runtime.OnStopListener;
+import com.google.appinventor.components.runtime.OnResumeListener;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.function.Consumer;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ScheduledFuture;
@@ -19,22 +26,31 @@ import java.util.concurrent.TimeUnit;
 
 /** Experimental testnet wallet. No mainnet, private-key import or sending operations. */
 @Extension(description = "Experimental Nexa testnet wallet with manual Electrum fast sync.")
-@DesignerComponent(version = 6, description = "Experimental Nexa testnet wallet",
+@DesignerComponent(version = 7, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
-public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
+public final class NexaPackagingProbe extends AndroidNonvisibleComponent implements OnPauseListener, OnStopListener, OnResumeListener {
   private static final Object INITIALIZATION_LOCK = new Object();
   private static volatile boolean initialized;
-  private static final ExecutorService WALLET_WORKER = Executors.newSingleThreadExecutor(
-      runnable -> new Thread(runnable, "NexaWallet"));
+  private static final ThreadPoolExecutor WALLET_WORKER = new ThreadPoolExecutor(1, 1, 0,
+      TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>(), runnable -> new Thread(runnable, "NexaWallet"));
+  private static final java.util.concurrent.ExecutorService SECURITY_WORKER = Executors.newSingleThreadExecutor(
+      runnable -> new Thread(runnable, "NexaLock"));
   private static volatile WalletSession session;
   private static final ScheduledThreadPoolExecutor FAST_SYNC_WATCHDOG = createWatchdog();
   private final android.content.Context applicationContext;
   private boolean initializing;
+  private final ForegroundGate gate = new ForegroundGate();
+  private final Set<GuardedRequest> pending = ConcurrentHashMap.newKeySet();
+  private final SensitiveScreen screen;
 
   public NexaPackagingProbe(ComponentContainer container) {
     super(container.$form());
     applicationContext = container.$context().getApplicationContext();
+    screen = new SensitiveScreen(form);
+    form.registerForOnPause(this);
+    form.registerForOnStop(this);
+    form.registerForOnResume(this);
   }
 
   @SimpleProperty(description = "True after native initialization succeeds in this process.")
@@ -119,58 +135,124 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
     }
   }
 
-  private void walletOperation(String operation, Runnable work) {
-    WALLET_WORKER.execute(() -> {
+  private void post(long token, Runnable event) {
+    form.runOnUiThread(() -> { if (gate.current(token)) event.run(); });
+  }
+
+  private void walletOperation(String operation, Consumer<GuardedRequest> work) {
+    walletOperation(operation, null, work);
+  }
+
+  private void walletOperation(String operation, String secret, Consumer<GuardedRequest> work) {
+    if (!gate.active()) return;
+    GuardedRequest request = new GuardedRequest(gate, secret, current -> {
       try {
-        work.run();
+        work.accept(current);
       } catch (WalletSession.Failure failure) {
-        form.runOnUiThread(() -> WalletFailed(operation, failure.code, failure.getMessage()));
+        post(current.token, () -> WalletFailed(operation, failure.code, failure.getMessage()));
       } catch (Exception | LinkageError failure) {
-        // Do not forward SDK exception text: it may include secret inputs.
         String code = failure.getClass().getSimpleName();
-        form.runOnUiThread(() -> WalletFailed(operation, code,
+        post(current.token, () -> WalletFailed(operation, code,
             "Nexa could not complete " + operation + ". The wallet was not automatically replaced."));
       }
+    }, pending::remove);
+    pending.add(request);
+    WALLET_WORKER.execute(request);
+  }
+
+  private void revoke(String reason) {
+    for (GuardedRequest request : pending) {
+      request.cancel();
+      if (WALLET_WORKER.remove(request)) pending.remove(request);
+    }
+    screen.clear();
+    WalletSession active = session;
+    if (active != null) {
+      long ticket = active.invalidateAccess();
+      SECURITY_WORKER.execute(() -> {
+        try { active.completeLock(ticket); }
+        catch (WalletSession.Failure failure) {
+          long token = gate.capture();
+          post(token, () -> WalletFailed("LockWallet", failure.code, failure.getMessage()));
+        }
+      });
+    }
+    SessionLocked(reason);
+  }
+
+  public void onPause() { if (gate.pause()) revoke("BACKGROUND"); }
+  public void onStop() { if (gate.pause()) revoke("BACKGROUND"); }
+  public void onResume() {
+    screen.protect();
+    boolean returning = !gate.active();
+    if (returning) gate.resume();
+    if (returning && session != null) AuthenticationRequired();
+  }
+
+  @SimpleFunction(description = "Revoke session access and request verified key locking. Does not stop normal chain synchronization.")
+  public void LockWallet() { gate.invalidate(); revoke("MANUAL"); }
+
+  @SimpleProperty(description = "Whether Android FLAG_SECURE is set on this Form. Does not protect other Forms or rooted devices.")
+  public boolean ScreenProtected() { return screen.protectedScreen(); }
+
+  @SimpleEvent(description = "Session access revoked immediately; in-flight SDK work must return before key locking can complete.")
+  public void SessionLocked(String reason) { EventDispatcher.dispatchEvent(this, "SessionLocked", reason); }
+
+  @SimpleEvent(description = "App resumed after backgrounding. Call OpenWallet again with the passphrase.")
+  public void AuthenticationRequired() { EventDispatcher.dispatchEvent(this, "AuthenticationRequired"); }
+
+  @SimpleFunction(description = "Re-authenticate to display an unfinished initial backup. Disabled after ConfirmBackup. Requires an open wallet.")
+  public void ShowRecoveryPhrase(String passphrase) {
+    walletOperation("ShowRecoveryPhrase", passphrase, request -> {
+      String phrase = walletSession().showRecoveryPhrase(request.secret(), request::valid);
+      post(request.token, () -> RecoveryPhraseReady(phrase));
     });
+  }
+
+  @SimpleEvent(description = "Recovery phrase for unfinished initial backup only. Never persist, log or transmit it.")
+  public void RecoveryPhraseReady(String recoveryPhrase) {
+    long token = gate.capture();
+    try { EventDispatcher.dispatchEvent(this, "RecoveryPhraseReady", recoveryPhrase); }
+    finally { screen.trackPhrase(recoveryPhrase); if (!gate.current(token)) screen.clear(); }
   }
 
   @SimpleFunction(description = "Create a new encrypted testnet wallet. Passphrase: at least 12 characters. Fails if a wallet exists.")
   public void CreateWallet(String passphrase) {
-    walletOperation("CreateWallet", () -> {
-      String phrase = walletSession().create(passphrase);
-      form.runOnUiThread(() -> WalletCreated(phrase));
+    walletOperation("CreateWallet", passphrase, request -> {
+      String phrase = walletSession().create(request.secret(), request::valid);
+      post(request.token, () -> WalletCreated(phrase));
     });
   }
 
   @SimpleFunction(description = "Reopen the existing testnet wallet with its passphrase. Never creates or resets a wallet.")
   public void OpenWallet(String passphrase) {
-    walletOperation("OpenWallet", () -> {
-      walletSession().open(passphrase);
-      form.runOnUiThread(this::WalletOpened);
+    walletOperation("OpenWallet", passphrase, request -> {
+      walletSession().open(request.secret(), request::valid);
+      post(request.token, this::WalletOpened);
     });
   }
 
   @SimpleFunction(description = "Confirm you have recorded the recovery phrase. Enables GetAddress; this does not verify the backup contents.")
   public void ConfirmBackup() {
-    walletOperation("ConfirmBackup", () -> {
+    walletOperation("ConfirmBackup", request -> {
       walletSession().confirmBackup();
-      form.runOnUiThread(this::BackupConfirmed);
+      post(request.token, this::BackupConfirmed);
     });
   }
 
   @SimpleFunction(description = "Read the public receive address cached at create/open, without rotating it. Requires backup confirmation.")
   public void GetAddress() {
-    walletOperation("GetAddress", () -> {
+    walletOperation("GetAddress", request -> {
       String address = walletSession().address();
-      form.runOnUiThread(() -> AddressReceived(address));
+      post(request.token, () -> AddressReceived(address));
     });
   }
 
   @SimpleFunction(description = "Read balances and sync state asynchronously. Amounts are exact NEXA text with 2 decimal places. Requires an open wallet.")
   public void GetBalance() {
-    walletOperation("GetBalance", () -> {
+    walletOperation("GetBalance", request -> {
       WalletBalance balance = walletSession().balance();
-      form.runOnUiThread(() -> BalanceReceived(balance.total, balance.confirmed,
+      post(request.token, () -> BalanceReceived(balance.total, balance.confirmed,
           balance.unconfirmed, balance.synced, balance.connected,
           balance.syncedHeight, balance.chainHeight));
     });
@@ -178,32 +260,34 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent {
 
   @SimpleFunction(description = "Manually fast-sync via Electrum, trusting its history. Requires the open wallet passphrase; keys are temporarily unlocked. Five-minute watchdog.")
   public void FastSync(String passphrase) {
-    walletOperation("FastSync", () -> walletSession().fastSync(passphrase, WALLET_WORKER,
+    walletOperation("FastSync", passphrase, request -> walletSession().fastSync(request.secret(), WALLET_WORKER,
         timeout -> {
           ScheduledFuture<?> scheduled = FAST_SYNC_WATCHDOG.schedule(timeout, 5, TimeUnit.MINUTES);
           return () -> scheduled.cancel(false);
         }, new WalletSession.FastSyncListener() {
           public void progress(String message) {
-            form.runOnUiThread(() -> FastSyncProgress(message));
+            post(request.token, () -> FastSyncProgress(message));
           }
           public void finished(WalletSession.FastSyncResult result) {
-            form.runOnUiThread(() -> FastSyncFinished(result.advanced, result.synced,
+            post(request.token, () -> FastSyncFinished(result.advanced, result.synced,
                 result.cancelled, result.beforeHeight, result.afterHeight, result.chainHeight));
           }
           public void failed(String code, String message) {
-            form.runOnUiThread(() -> WalletFailed("FastSync", code, message));
+            post(request.token, () -> WalletFailed("FastSync", code, message));
           }
-        }));
+        }, request::valid));
   }
 
   @SimpleFunction(description = "Request cooperative cancellation. FastSyncRunning remains true until the SDK finishes; this is not immediate thread termination.")
   public void CancelFastSync() {
-    walletOperation("CancelFastSync", () -> walletSession().cancelFastSync());
+    walletOperation("CancelFastSync", request -> walletSession().cancelFastSync());
   }
 
   @SimpleEvent(description = "New encrypted testnet wallet created. Show recoveryPhrase privately once for backup; never log or transmit it.")
   public void WalletCreated(String recoveryPhrase) {
-    EventDispatcher.dispatchEvent(this, "WalletCreated", recoveryPhrase);
+    long token = gate.capture();
+    try { EventDispatcher.dispatchEvent(this, "WalletCreated", recoveryPhrase); }
+    finally { screen.trackPhrase(recoveryPhrase); if (!gate.current(token)) screen.clear(); }
   }
 
   @SimpleEvent(description = "Existing testnet wallet opened. Keys are relocked; this does not imply blockchain sync.")

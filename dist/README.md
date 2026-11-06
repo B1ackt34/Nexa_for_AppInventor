@@ -1,6 +1,6 @@
-# NexaPackagingProbe 0.0.6 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.7 — wallet testnet sperimentale
 
-Scaricare **NexaPackagingProbe-0.0.6.aix** e aggiornare l'estensione nel progetto
+Scaricare **NexaPackagingProbe-0.0.7.aix** e aggiornare l'estensione nel progetto
 App Inventor. Le versioni precedenti restano solo come riferimento.
 
 ## Funzioni
@@ -87,3 +87,18 @@ Non inviare passphrase, frase di recupero o database.
 39 test locali e build verificati. La correzione mira al collegamento prematuro
 che nel codice SDK può richiedere derivazioni a wallet locked. Il punto esatto
 sul telefono non è dimostrato da stack/DB e richiede la prova dell'utente.
+
+
+## Protezioni 0.0.7
+
+FLAG_SECURE sulla Form del wallet, revoca della sessione in background, richieste
+in coda annullate e verifica SDK del blocco chiavi. Nuovi blocchi LockWallet,
+ShowRecoveryPhrase (solo backup iniziale non confermato), ScreenProtected,
+SessionLocked e AuthenticationRequired. Al ritorno usare OpenWallet con la
+passphrase; FastSync interrotto resta occupato fino alla conferma SDK.
+
+49 test controller superati; richiede prove reali su smartphone. Limiti e fonti
+nel README del progetto. Non corregge backup del manifest finale, prima
+scrittura SDK in chiaro o residui in memoria/SQLite. Rimane testnet sperimentale.
+Aggiornare lo stesso progetto e installare l'APK senza disinstallare/cancellare
+dati. Nessun wallet viene ricreato. Verificare screenshot, Home/ritorno e riapertura.
