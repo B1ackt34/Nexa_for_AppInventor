@@ -7,6 +7,7 @@ import org.nexa.libnexakotlin.InitKt;
 import org.nexa.libnexakotlin.PayAddress;
 import org.nexa.libnexakotlin.FastforwardKt;
 import org.nexa.libnexakotlin.Objectify;
+import org.nexa.libnexakotlin.Blockchain;
 import kotlin.Unit;
 import java.util.function.Consumer;
 
@@ -26,12 +27,13 @@ final class NexaWalletStorage implements WalletSession.Storage {
 
   public WalletSession.Handle create() {
     // nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 1; initializer defaults to null.
-    return new Adapter(InitKt.newWallet(NAME, ChainSelector.NEXATESTNET, null));
+    return new Adapter(InitKt.newWallet(NAME, ChainSelector.NEXATESTNET, null), true);
   }
 
   public WalletSession.Handle open() {
-    // Same skill, pattern 3; never fall back to newWallet on any exception.
-    return new Adapter(InitKt.openWallet(NAME, null));
+    // Wallet lifecycle pattern 7; recoveryFlow.md: open disconnected, attach later.
+    // Unlike openWallet(), this does not prepare new addresses before unlock.
+    return new Adapter(InitKt.openDisconnectedWallet(NAME), false);
   }
 
   public boolean backupConfirmed() {
@@ -56,7 +58,33 @@ final class NexaWalletStorage implements WalletSession.Storage {
 
   private static final class Adapter implements WalletSession.Handle {
     private final Bip44Wallet wallet;
-    Adapter(Bip44Wallet wallet) { this.wallet = wallet; }
+    private boolean connected;
+    private boolean connectionFailed;
+    Adapter(Bip44Wallet wallet, boolean connected) {
+      this.wallet = wallet;
+      this.connected = connected;
+    }
+
+    public void connect() {
+      if (connected) return;
+      if (connectionFailed) {
+        throw new WalletSession.Failure("RESTART_REQUIRED",
+            "A previous chain attachment failed. Restart the app process without clearing data.");
+      }
+      // Wallet lifecycle: chain-bound wallet; never attach a different network.
+      if (wallet.getChainSelector() != ChainSelector.NEXATESTNET) {
+        throw new WalletSession.Failure("WRONG_NETWORK", "This extension requires a testnet wallet.");
+      }
+      // Pattern 5: blockchainFor is idempotent per chain. Pattern 7/recoveryFlow.md
+      // allow attaching after opening disconnected; addBlockchain is documented
+      // in the lifecycle mental model. null/null resume semantics verified against
+      // init.kt openWallet and wallet.kt startChain in the official 0.5.69 sources.
+      Blockchain chain = InitKt.blockchainFor(ChainSelector.NEXATESTNET, null);
+      connectionFailed = true;
+      wallet.addBlockchain(chain, null, null);
+      connected = true;
+      connectionFailed = false;
+    }
 
     public String recoveryPhrase() {
       // Wallet lifecycle pattern 1 and recoveryFlow.md, Create flow step 3.

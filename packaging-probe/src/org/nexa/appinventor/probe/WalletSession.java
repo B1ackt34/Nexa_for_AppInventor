@@ -11,6 +11,7 @@ final class WalletSession {
     void save();
     Boolean unlock(String passphrase);
     void lock();
+    void connect();
     String currentTestnetAddress();
     WalletBalance balance();
     Runnable startFastSync(Consumer<String> progress);
@@ -113,14 +114,17 @@ final class WalletSession {
     requireNoFastSync();
     requirePassphrase(passphrase);
     address = null;
-    if (handle == null) {
-      if (!storage.exists()) {
-        throw new Failure("WALLET_NOT_FOUND", "No testnet wallet exists. Use CreateWallet.");
-      }
-      // Keep the handle for retries; do not open the same DB twice in this process.
-      handle = storage.open();
-    }
+    String phase = "READ_DATABASE";
     try {
+      if (handle == null) {
+        if (!storage.exists()) {
+          throw new Failure("WALLET_NOT_FOUND", "No testnet wallet exists. Use CreateWallet.");
+        }
+        // Open disconnected so attachment cannot derive keys before unlock.
+        // Keep the handle for password retries without reopening the same DB.
+        handle = storage.open();
+      }
+      phase = "UNLOCK";
       Boolean unlocked = handle.unlock(passphrase);
       if (unlocked == null) {
         throw new Failure("WALLET_NOT_ENCRYPTED", "The existing wallet is not encrypted. No changes made.");
@@ -128,13 +132,22 @@ final class WalletSession {
       if (!unlocked) {
         throw new Failure("INVALID_PASSPHRASE", "The passphrase is incorrect.");
       }
+      phase = "CONNECT_CHAIN";
+      handle.connect();
+      phase = "READ_ADDRESS";
       String candidate = handle.currentTestnetAddress();
+      phase = "RELOCK";
       handle.lock();
       address = candidate;
     } catch (Exception | LinkageError failure) {
       address = null;
-      try { handle.lock(); } catch (Exception | LinkageError ignored) { }
-      throw failure;
+      if (handle != null) {
+        try { handle.lock(); } catch (Exception | LinkageError ignored) { }
+      }
+      if (failure instanceof Failure) throw (Failure) failure;
+      // Expose only the operation stage and exception type, not SDK text/secrets.
+      throw new Failure(failure.getClass().getSimpleName(),
+          "OpenWallet failed during " + phase + ". Existing wallet data was not replaced.");
     }
   }
 

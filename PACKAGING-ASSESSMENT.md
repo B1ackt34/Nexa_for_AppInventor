@@ -419,3 +419,34 @@ Pacchetto compat sotto 5 MiB per file, test descrittori/ZIP/JSON/JNI superati.
 AIX 0.0.5: 13.754.661 byte, massimo interno 3.276.061 byte.
 SHA256 d8914e6a3a16409ea3f346594c85527e72c7318f40bb219f4f32cf10a261ff08.
 Prestazioni ed esito FastSync su smartphone rimangono da verificare dall'utente.
+
+
+## Versione 0.0.6 — apertura cifrata dopo ricezione (2026-11-06)
+
+L'utente riferisce WalletLockedException in OpenWallet su 0.0.5 dopo aver ricevuto
+testnexa da un altro wallet e riavviato l'app. Non raccolti DB o segreti. Nel
+sorgente ufficiale 0.5.69 openWallet() attacca la catena prima del return e
+startChain chiama prepareDestinations; ciò può richiedere derivazioni prima del
+nostro unlock. Non è provato che lo stack del telefono si fermi proprio lì.
+
+La nuova apertura usa openDisconnectedWallet, conserva il handle per eventuali
+password errate, sblocca, verifica la rete, collega la blockchain con
+blockchainFor/addBlockchain(null,null) e infine legge indirizzo/riblocca. Il
+parametro di ripresa null/null coincide con l'openWallet SDK precedente e carica
+lo stato persistito. Collegamento fallito protetto da ripetizioni parziali nello
+stesso processo. Nome DB e chiavi invariati; nessun reset o nuova creazione.
+
+Fonti: wallet lifecycle pattern 7 e recoveryFlow.md attach later, pattern 5
+blockchainFor, mental model addBlockchain, pattern 6 unlock/lock. Dettagli
+parametri di ripresa verificati sources JAR init.kt:450-476 e wallet.kt:5871-6005,
+segnalati nel gap log come mancanti nel corpus. Firme Java controllate con javap.
+
+39 test controller passati: nuova regressione ordine unlock-before-connect,
+password errata con retry sul handle disconnesso, errore connessione con lock e
+nessuna nuova generazione. Errori OpenWallet riportano solo fase e classe,
+non testo SDK potenzialmente sensibile. Build Rush completa e controlli archivio,
+JNI, blocchi, Java ZIP/JSON e limite interno 5 MiB superati. La prova sul wallet
+ricevuto resta sullo smartphone; i test finti non validano SQLite reale.
+
+AIX 0.0.6: 13.756.954 byte; massimo file interno 3.276.061 byte.
+SHA256 967c2f9b05955fa5a6e6c8624f704b65185cc07066eb50b311b24ea4db7099e9.

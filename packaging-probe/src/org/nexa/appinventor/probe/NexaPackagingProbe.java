@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Experimental testnet wallet. No mainnet, private-key import or sending operations. */
 @Extension(description = "Experimental Nexa testnet wallet with manual Electrum fast sync.")
-@DesignerComponent(version = 5, description = "Experimental Nexa testnet wallet",
+@DesignerComponent(version = 6, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
 public final class NexaPackagingProbe extends AndroidNonvisibleComponent {

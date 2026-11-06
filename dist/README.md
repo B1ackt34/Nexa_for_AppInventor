@@ -1,6 +1,6 @@
-# NexaPackagingProbe 0.0.5 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.6 — wallet testnet sperimentale
 
-Scaricare **NexaPackagingProbe-0.0.5.aix** e aggiornare l'estensione nel progetto
+Scaricare **NexaPackagingProbe-0.0.6.aix** e aggiornare l'estensione nel progetto
 App Inventor. Le versioni precedenti restano solo come riferimento.
 
 ## Funzioni
@@ -23,7 +23,7 @@ Errori: WalletFailed(operation, code, message).
 
 ## Stato delle verifiche
 
-36 test desktop sulle regole di persistenza/non sovrascrittura superati. Build
+39 test desktop sulle regole di persistenza/non sovrascrittura superati. Build
 Rush, D8, controlli ZIP/JSON, descrittori e JNI superati. L'utente ha confermato creazione, indirizzo e riapertura della 0.0.3 sul
 dispositivo. I valori reali e la sincronizzazione della nuova GetBalance richiedono
 la prova della 0.0.4.
@@ -67,5 +67,23 @@ riblocco; se FastSyncRunning resta vero dopo un errore di avvio/timeout, arresta
 completamente il processo dell'app e riaprire senza cancellare dati.
 Non si avvia una seconda ricerca senza conferma di fine della prima.
 
-Build e 36 test locali superati. La ricerca Electrum reale su Android richiede
+Build e 39 test locali superati. La ricerca Electrum reale su Android richiede
 ancora prova della nuova versione; non sono promessi velocità o esito garantiti.
+
+
+## Correzione OpenWallet dopo una ricezione — 0.0.6
+
+Sostituisce l'apertura con collegamento automatico prima dello sblocco con:
+openDisconnectedWallet → unlock → blockchainFor/addBlockchain → indirizzo → lock.
+L'API pubblica OpenWallet(passphrase) non cambia. Nome DB, rete testnet e chiavi
+esistenti restano gli stessi; nessun fallback di creazione o reset aggiunto.
+
+Aggiornare estensione e APK dello stesso progetto senza disinstallare/cancellare
+dati. Chiamare OpenWallet, non CreateWallet. Da WalletOpened controllare
+GetAddress e GetBalance. L'indirizzo corrente può ruotare dopo una ricezione.
+Se fallisce, riportare operation/code/message: ora indica la fase precisa.
+Non inviare passphrase, frase di recupero o database.
+
+39 test locali e build verificati. La correzione mira al collegamento prematuro
+che nel codice SDK può richiedere derivazioni a wallet locked. Il punto esatto
+sul telefono non è dimostrato da stack/DB e richiede la prova dell'utente.

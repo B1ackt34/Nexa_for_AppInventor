@@ -9,14 +9,21 @@ public final class WalletSessionTest {
     RuntimeException openFailure;
     final FakeHandle wallet = new FakeHandle();
     public boolean exists() { return exists; }
-    public WalletSession.Handle create() { creates++; exists = true; return wallet; }
-    public WalletSession.Handle open() { opens++; if (openFailure != null) throw openFailure; return wallet; }
+    public WalletSession.Handle create() { creates++; exists = true; wallet.connected = true; return wallet; }
+    public WalletSession.Handle open() {
+      opens++;
+      if (openFailure != null) throw openFailure;
+      wallet.connected = false;
+      return wallet;
+    }
     public void resetBackup() { confirmed = false; }
     public boolean backupConfirmed() { return confirmed; }
     public void confirmBackup() { confirmed = true; }
   }
   private static final class FakeHandle implements WalletSession.Handle {
-    boolean encrypted, locked;
+    boolean encrypted, locked, connected;
+    int connects;
+    RuntimeException connectFailure;
     boolean failSave, checkedFailure;
     int phraseReads;
     int balanceReads, unlocks, addressReads;
@@ -36,6 +43,12 @@ public final class WalletSessionTest {
       boolean ok = password.equals(passphrase); locked = !ok; return ok;
     }
     public void lock() { locked = true; }
+    public void connect() {
+      connects++;
+      if (locked) throw new IllegalStateException("keys required to attach chain");
+      if (connectFailure != null) throw connectFailure;
+      connected = true;
+    }
     public String currentTestnetAddress() {
       addressReads++;
       if (checkedFailure) return sneaky(new java.io.IOException("checked SDK failure"));
@@ -127,7 +140,10 @@ public final class WalletSessionTest {
       FakeStorage storage = new FakeStorage(); storage.exists = true;
       storage.openFailure = new IllegalStateException("corrupt database");
       try { new WalletSession(storage).open(password); throw new AssertionError(); }
-      catch (IllegalStateException expected) { check(storage.creates == 0 && storage.opens == 1); }
+      catch (WalletSession.Failure expected) {
+        check(expected.code.equals("IllegalStateException") && expected.getMessage().contains("READ_DATABASE"));
+        check(storage.creates == 0 && storage.opens == 1);
+      }
     });
     test("restart reopens same address without reading phrase or generating keys", () -> {
       FakeStorage storage = new FakeStorage(); WalletSession first = new WalletSession(storage);
@@ -321,6 +337,32 @@ public final class WalletSessionTest {
     });
     test("cancel without an active search reports the explicit error", () -> {
       FastFixture f = new FastFixture(); expect("FAST_SYNC_NOT_RUNNING", f.session::cancelFastSync);
+    });
+    test("cold encrypted reopen unlocks before chain needs private-key derivation", () -> {
+      FakeStorage storage = new FakeStorage(); WalletSession first = new WalletSession(storage);
+      first.create(password); first.confirmBackup();
+      WalletSession restarted = new WalletSession(storage); restarted.open(password);
+      check(storage.wallet.connects == 1 && storage.wallet.connected && storage.wallet.locked);
+      check(restarted.address().equals("FAKE TEST ADDRESS") && storage.creates == 1);
+    });
+    test("cold wrong-password retry reuses disconnected handle and never connects early", () -> {
+      FakeStorage storage = new FakeStorage(); new WalletSession(storage).create(password);
+      WalletSession restarted = new WalletSession(storage);
+      expect("INVALID_PASSPHRASE", () -> restarted.open("incorrect-passphrase"));
+      check(storage.wallet.connects == 0 && storage.wallet.locked);
+      restarted.open(password);
+      check(storage.opens == 1 && storage.creates == 1 && storage.wallet.connected);
+    });
+    test("chain-attachment failure relocks, reports its stage and never creates keys", () -> {
+      FakeStorage storage = new FakeStorage(); new WalletSession(storage).create(password);
+      storage.wallet.connectFailure = new IllegalStateException("sensitive SDK text");
+      WalletSession restarted = new WalletSession(storage);
+      try { restarted.open(password); throw new AssertionError(); }
+      catch (WalletSession.Failure expected) {
+        check(expected.getMessage().contains("CONNECT_CHAIN"));
+        check(!expected.getMessage().contains("sensitive SDK text"));
+      }
+      check(storage.wallet.locked && !restarted.isOpen() && storage.creates == 1);
     });
     System.out.println("Passed: " + passed + "; Android/Nexa execution is not covered by these tests.");
   }

@@ -1,4 +1,4 @@
-# NexaPackagingProbe 0.0.5 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.6 — wallet testnet sperimentale
 
 Estensione Java per MIT App Inventor 2 con Nexa Android 0.5.69. Il nome del
 componente resta NexaPackagingProbe per aggiornare i blocchi delle versioni precedenti.
@@ -28,7 +28,7 @@ non implica chiavi sbloccate o sincronizzazione della blockchain completata.
 
 ## Prima creazione sul dispositivo
 
-1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.5.aix`.
+1. Aggiornare l'estensione con `NexaPackagingProbe-0.0.6.aix`.
 2. Aggiungere un PasswordTextBox, una Label privata per la frase, una Label per
    l'indirizzo e pulsanti Crea, Conferma backup e Indirizzo.
 3. Da Crea.Click chiamare CreateWallet con il testo della PasswordTextBox.
@@ -88,7 +88,8 @@ Corpus fissato al commit `3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24`:
 
 Le firme Java sono verificate con javap sugli artefatti ufficiali 0.5.69:
 LibnexaandroidKt.initializeLibNexa(String), InitKt.newWallet(String, ChainSelector,
-Function1), InitKt.openWallet(String, Function1), getRecoverySecret(),
+Function1), InitKt.openDisconnectedWallet(String), InitKt.blockchainFor(ChainSelector,
+Function1), CommonWallet.addBlockchain(Blockchain, Long, Long), getRecoverySecret(),
 saveBip44Wallet(), encrypt(String), unlock(String), lock(),
 getCurrentDestination().getAddress(), PayAddress.getChainSelector().
 Non sono usati metodi privati JNI, setter di contesto extra-corpus o API inventate.
@@ -105,7 +106,7 @@ Rush v206 usa compile SDK 36; min_sdk=29 (Android 10).
    Il lock include l'alias metadata kotlin-stdlib-common richiesto da Gradle.
 2. In questa directory: `rush deps sync` e `rush build`.
 3. `python3 tools/compat_aix.py`
-4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.5.aix`
+4. `python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.6.aix`
 
 Usare proxy e CA della sessione. Non disattivare TLS o controlli di integrità.
 original_names preserva i nomi Nexa richiesti da JNI. Il postprocessore mantiene
@@ -176,7 +177,7 @@ getBalance(), getBalanceConfirmed(), getBalanceUnconfirmed(), synced(long),
 getSyncedHeight(), getBlockchain().getCurHeight(), getNet().getP2pCnxns().
 La formattazione BigDecimal è codice Java applicativo, non un'API Nexa nuova.
 
-36 test del controller/formattazione/FastSync superati con backend finti. Cifratura, DB,
+39 test del controller/formattazione/FastSync/apertura superati con backend finti. Cifratura, DB,
 rete e valori reali del saldo su Android richiedono la prova del nuovo APK.
 
 
@@ -251,7 +252,50 @@ questa vecchia release come una scansione esaustiva di ogni percorso/account o
 identità citato genericamente dal corpus corrente. Nessuna derivazione extra
 viene inventata. Lacuna registrata in SKILL-UPDATES.md.
 
-36 test locali passati includono callback sincroni/tardivi/duplicati, password
+39 test locali passati includono callback sincroni/tardivi/duplicati, password
 errata, nessun salto, progresso SPV concorrente, annullamento, timeout, guardia
 anti-concorrenza e riblocco. Non eseguono Electrum o Android: velocità, esito
 reale e persistenza dopo fast-forward richiedono la prova dello smartphone.
+
+
+## Correzione apertura wallet cifrato dopo una ricezione (0.0.6)
+
+L'utente ha ricevuto NEXA testnet e poi, dopo riavvio, osservato WalletLockedException
+in OpenWallet nella 0.0.5. Il vecchio adapter chiamava openWallet prima di unlock.
+Nel sorgente ufficiale 0.5.69 openWallet attacca la catena e startChain chiama
+prepareDestinations prima di restituire il wallet. La preparazione può richiedere
+nuove derivazioni prima che la nostra passphrase sia stata applicata.
+Non abbiamo il DB/stack del telefono: è una causa concreta compatibile con il
+sintomo, non una prova che ogni WalletLockedException provenga da quel punto.
+
+Il nuovo ordine è:
+
+1. openDisconnectedWallet sullo stesso nome DB esistente;
+2. unlock con la passphrase fornita;
+3. blockchainFor(NEXATESTNET) e addBlockchain con stato di ripresa;
+4. lettura dell'indirizzo pubblico;
+5. lock prima di WalletOpened.
+
+Non usare CreateWallet, non disinstallare o cancellare dati. Aggiornare estensione
+e APK dello stesso progetto e provare OpenWallet con la passphrase esistente.
+Dopo WalletOpened controllare GetAddress e GetBalance. Se fallisce, inviare solo
+operation/code/message, non password, frase o file database.
+
+La lettura disconnessa mantiene il handle per ritentare una password errata senza
+riaprire il DB. Un collegamento alla catena fallito richiede riavvio del processo
+prima di un altro aggancio, per evitare callback duplicate. Nessun reset,
+rediscover o recupero da frase viene introdotto dall'estensione.
+
+Fonti: wallet lifecycle pattern 7 per openDisconnectedWallet e recoveryFlow.md
+("open disconnected and attach later"), pattern 5 per blockchainFor; addBlockchain
+è documentato nel mental model e nella distinzione new/recover. I parametri
+null/null di ripresa sono stati verificati nei sorgenti ufficiali 0.5.69,
+commonMain/init.kt:450-476 e wallet.kt:5871-6005: coincidono con openWallet e
+caricano lo stato chain salvato. Questo dettaglio è segnalato nel gap log perché
+il corpus non descrive esplicitamente l'apertura cifrata in due fasi.
+Tutte le firme sono state verificate con javap; nessun metodo SDK inventato.
+
+39 test controller con backend finti superati. La nuova sequenza richiede ancora
+la prova del wallet reale ricevuto sul telefono. Per distinguere un problema
+anteriore al collegamento, WalletFailed ora indica READ_DATABASE, UNLOCK,
+CONNECT_CHAIN, READ_ADDRESS o RELOCK, senza riportare il testo grezzo SDK.

@@ -20,14 +20,14 @@ def inspect(path):
         methods = {"Initialize"}
         events = {"InitializationSucceeded", "InitializationFailed"}
         properties = {"Initialized"}
-        if component["versionName"] in {"0.0.3", "0.0.4", "0.0.5"}:
+        if component["versionName"] in {"0.0.3", "0.0.4", "0.0.5", "0.0.6"}:
             methods |= {"CreateWallet", "OpenWallet", "ConfirmBackup", "GetAddress"}
             events |= {"WalletCreated", "WalletOpened", "BackupConfirmed", "AddressReceived", "WalletFailed"}
             properties |= {"Network", "WalletOpen"}
             parameters = {method["name"]: method["params"] for method in component["methods"]}
             assert parameters["CreateWallet"] == [{"name": "passphrase", "type": "text"}]
             assert parameters["OpenWallet"] == [{"name": "passphrase", "type": "text"}]
-        if component["versionName"] in {"0.0.4", "0.0.5"}:
+        if component["versionName"] in {"0.0.4", "0.0.5", "0.0.6"}:
             methods.add("GetBalance")
             events.add("BalanceReceived")
             assert parameters["GetBalance"] == []
@@ -41,7 +41,7 @@ def inspect(path):
                 {"name": "syncedHeight", "type": "text"},
                 {"name": "chainHeight", "type": "text"},
             ]
-        if component["versionName"] == "0.0.5":
+        if component["versionName"] in {"0.0.5", "0.0.6"}:
             methods |= {"FastSync", "CancelFastSync"}
             events |= {"FastSyncProgress", "FastSyncFinished"}
             properties.add("FastSyncRunning")
@@ -83,7 +83,7 @@ def inspect(path):
         for library in info["libraries"]:
             folder = "aars/" if library.endswith(".aar") else "files/"
             assert prefix + folder + library in aix.namelist(), library
-        if component["versionName"] in {"0.0.2", "0.0.3", "0.0.4", "0.0.5"}:
+        if component["versionName"] in {"0.0.2", "0.0.3", "0.0.4", "0.0.5", "0.0.6"}:
             assert all(entry.file_size < 5 * 1024 * 1024 for entry in aix.infolist())
     print("PASS: descriptors, DEX, Startup metadata, Nexa JNI class names and four native ABIs")
     print("SHA-256:", hashlib.sha256(path.read_bytes()).hexdigest())

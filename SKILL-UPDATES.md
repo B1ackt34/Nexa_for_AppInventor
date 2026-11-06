@@ -72,3 +72,21 @@ La derivazione legge wallet.secret durante il job: il wallet cifrato viene
 sbloccato tramite l'API documentata per la durata dell'operazione, poi ribloccato.
 Non vengono usate direttamente secret, funzioni interne o altri overload non
 necessari. Il callback finished non viene trattato come prova di successo.
+
+
+2026-11-06 — riapertura cifrata prima dell'aggancio blockchain
+
+Stato: open. Wallet lifecycle pattern 3 mostra openWallet seguito da unlock in un
+passo separato. La 0.5.69 openWallet (sources JAR ufficiale commonMain/init.kt:
+450-476) invoca addBlockchain prima del return; commonMain/wallet.kt:6005-6016
+invoca prepareDestinations, che può richiedere derivazione a wallet ancora locked.
+Sintomo utente dopo ricezione: WalletLockedException in OpenWallet, DB non raccolto.
+Il punto esatto non è confermato da stack del dispositivo.
+
+Usate API già nel corpus: openDisconnectedWallet (pattern 7), unlock (pattern 6),
+blockchainFor (pattern 5), addBlockchain (mental model, recoveryFlow attach later).
+La firma addBlockchain(Blockchain, Long?, Long?) e null/null per la ripresa non
+sono spiegate nel corpus: verificate contro init.kt:475 e wallet.kt:5871-6005
+(loadChainState prima dei fallback). Nessuna derivazione o accesso interno al DB
+inventati. La skill dovrebbe documentare questo ordine per wallet cifrati e la
+ripresa dello stato, con prova di riavvio dopo una ricezione reale.
