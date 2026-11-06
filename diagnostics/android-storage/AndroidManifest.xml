@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.nexa.storage.diagnostic" android:versionCode="1" android:versionName="0.1.0">
+  <uses-sdk android:minSdkVersion="29" android:targetSdkVersion="36"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+  <application android:label="Nexa Storage Diagnostic" android:debuggable="false"
+      android:allowBackup="false" android:fullBackupContent="@xml/nexa_backup_rules"
+      android:dataExtractionRules="@xml/nexa_data_extraction_rules"
+      android:extractNativeLibs="true" android:usesCleartextTraffic="true"
+      android:theme="@android:style/Theme.Material.Light.NoActionBar">
+    <activity android:name=".DiagnosticActivity" android:exported="true"
+        android:configChanges="orientation|screenSize|keyboardHidden">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
+      </intent-filter>
+    </activity>
+    <provider android:name="androidx.startup.InitializationProvider"
+        android:authorities="org.nexa.storage.diagnostic.androidx-startup" android:exported="false">
+      <meta-data android:name="org.nexa.libnexakotlin.Initialiser" android:value="androidx.startup"/>
+    </provider>
+  </application>
+</manifest>

@@ -102,3 +102,21 @@ nel README del progetto. Non corregge backup del manifest finale, prima
 scrittura SDK in chiaro o residui in memoria/SQLite. Rimane testnet sperimentale.
 Aggiornare lo stesso progetto e installare l'APK senza disinstallare/cancellare
 dati. Nessun wallet viene ricreato. Verificare screenshot, Home/ritorno e riapertura.
+
+
+## App diagnostica separata — Nexa Storage Diagnostic 0.1.0
+
+`NexaStorageDiagnostic-0.1.0.apk` si installa direttamente come app distinta
+(package org.nexa.storage.diagnostic), senza aggiornare l'estensione 0.0.7 o il
+wallet personale. Crea soltanto un wallet testnet usa-e-getta con nome fisso e
+password diagnostica pubblica. Non inserire credenziali personali o inviare fondi.
+
+Prima prova: 1 Crea → 2 Cifra → Chiudi processo diagnostico → riaprire l'app →
+3 Riapri. Poi Copia rapporto senza segreti. Rimandare i test di interruzione a
+dopo la verifica del rapporto normale. Istruzioni e fonti in
+../diagnostics/android-storage/README.md.
+
+18 test desktop scanner/protocollo passati, APK compilato, firma v3, allineamento,
+backup escluso staticamente e identità JNI verificati. Esecuzione Android ancora
+da verificare sul telefono. Una ricerca negativa non prova bonifica dei segreti.
+La diagnostica non applica correzioni SDK o backup al wallet esistente.
