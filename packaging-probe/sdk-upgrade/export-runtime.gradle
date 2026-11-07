@@ -1,0 +1,32 @@
+// Init script for the pinned upstream checkout; does not modify upstream sources.
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+
+gradle.projectsEvaluated {
+  def p = gradle.rootProject.findProject(':libnexakotlin')
+  p.tasks.register('exportAndroidRuntimeArtifacts') {
+    dependsOn(p.tasks.named('bundleAndroidMainAar'))
+    dependsOn(gradle.rootProject.project(':nexacli').tasks.named('bundleAndroidMainAar'))
+    dependsOn(gradle.rootProject.project(':libnexajni').tasks.named('assembleRelease'))
+    doLast {
+      def output = gradle.rootProject.findProperty('sdkUpgradeArtifactsOutput')
+      if (!output) throw new GradleException('Set -PsdkUpgradeArtifactsOutput=/absolute/path/artifacts.json')
+      def config = p.configurations.getByName('androidRuntimeClasspath')
+      // Project secondary variants are not complete libraries. Add project AARs
+      // explicitly; keep the original AAR/JAR artifacts for external modules.
+      def view = config.incoming.artifactView {
+        componentFilter { id -> id instanceof ModuleComponentIdentifier }
+      }
+      def artifacts = view.artifacts.artifacts.collect {
+        def id = it.id.componentIdentifier
+        [id: "${id.group}:${id.module}:${id.version}".toString(), name: it.file.name, path: it.file.absolutePath]
+      }
+      [[':nexacli', 'nexacli.aar'], [':libnexajni', 'libnexajni-release.aar']].each { item ->
+        def project = gradle.rootProject.project(item[0])
+        def aar = new File(project.projectDir, 'build/outputs/aar/' + item[1])
+        if (!aar.isFile()) throw new GradleException('Missing project AAR: ' + aar)
+        artifacts.add([id: "${project.group}:${project.name}:${project.version}".toString(), name: aar.name, path: aar.absolutePath])
+      }
+      new File(output.toString()).text = groovy.json.JsonOutput.toJson(artifacts)
+    }
+  }
+}

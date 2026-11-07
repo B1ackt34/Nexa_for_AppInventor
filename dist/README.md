@@ -1,7 +1,17 @@
-# NexaPackagingProbe 0.0.7 — wallet testnet sperimentale
+# NexaPackagingProbe 0.0.8 — candidata con SDK 0.7.5
 
-Scaricare **NexaPackagingProbe-0.0.7.aix** e aggiornare l'estensione nel progetto
-App Inventor. Le versioni precedenti restano solo come riferimento.
+Scaricare **NexaPackagingProbe-0.0.8.aix** per provare il nuovo SDK su un progetto
+testnet separato. La 0.0.7 resta la baseline già verificata dall'utente sul telefono.
+
+La candidata usa libnexakotlin0.7.5 compilato dal tag ufficiale, con JNI abbinato e
+quattro ABI. Build Rush/D8, 49 test controller e controlli packaging superati.
+Compilazione APK sul servizio MIT e runtime Android con questo SDK ancora da
+verificare. Il SDK upstream dichiara compileSdk37; non è garantita dalla sola AIX
+la compatibilità con il server MIT compileSdk36.
+
+Mostrare la nuova proprietà **LibNexaVersion** per verificare il valore `0.7.5`.
+Firme dei blocchi precedenti conservate; nessun invio/importazione chiavi aggiunto.
+Dettagli, fonti e prove: [profilo SDK0.7.5](../packaging-probe/sdk-upgrade/CANDIDATE-0.0.8.md).
 
 ## Funzioni
 
