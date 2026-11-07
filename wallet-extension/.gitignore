@@ -1,0 +1,5 @@
+/deps/
+/out/
+/.rush/
+__pycache__/
+*.pyc

@@ -1,0 +1,117 @@
+# Candidata 0.0.9: invio NEXATESTNET
+
+Mantiene tipo del componente, blocchi precedenti e database della 0.0.8.
+Non occorre creare un altro wallet o cancellare i dati. Richiede Android 10/API29.
+SDK libnexakotlin 0.7.5 compilato dal tag ufficiale; 53 dipendenze e hash in
+SDK-PROVENANCE.json, identici alla 0.0.8. Nessuna nuova libreria Android.
+
+## Blocchi nuovi
+
+- `SendNexa(address, amountNexa, maxFeeNexa, passphrase)`: prepara e firma una
+  transazione, riblocca le chiavi e mostra un dialogo Android protetto. Solo il
+  pulsante **Invia** nel dialogo autorizza il pagamento. Gli importi sono testo
+  in NEXA, punto decimale e massimo due decimali; niente conversioni Double.
+  `maxFeeNexa` è il limite totale di commissione accettabile, non una tariffa.
+- `CancelSendNexa()`: annulla esclusivamente la bozza prima della conferma.
+- `GetLastSendStatus()`: legge l'ultimo pagamento approvato e la storia SDK.
+- `RetryLastSendNexa()`: propone una nuova conferma nativa per ritrasmettere
+  esattamente i byte precedentemente approvati, senza ricostruire il pagamento.
+- `SendInProgress`: preparazione, anteprima o chiamata SDK in corso. Per un
+  pagamento precedente irrisolto usare GetLastSendStatus.
+
+Eventi: `SendNexaPrepared(requestId,address,amount,fee,total)` è informativo;
+`SendNexaSubmitted(idem)` indica solo la richiesta all'SDK;
+`SendNexaCancelled(requestId,reason)` segnala annullamento/scadenza;
+`SendNexaStatus(idem,state,confirmedHeight)` riporta lo stato.
+Gli errori passano attraverso `WalletFailed(operation,code,message)`.
+
+## Prova sul telefono
+
+1. Importare il nuovo AIX nel progetto già funzionante, compilare l'APK e
+   aggiornarlo senza disinstallare o cancellare i dati. Per questa prova usare
+   un wallet testnet con fondi di prova e backup verificato.
+2. Verificare `LibNexaVersion = 0.7.5`, aprire il wallet e attendere saldo
+   sincronizzato e connessione. Sono utilizzabili solo input con almeno una
+   conferma, come scelta prudenziale dell'estensione.
+3. Aggiungere campi per indirizzo NEXATESTNET, importo e limite commissione
+   (entrambi testo), oltre al campo password già esistente. Non salvare password
+   o frase in TinyDB, etichette persistenti, log o servizi esterni.
+4. Chiamare SendNexa con un piccolo importo e un limite commissione scelto
+   consapevolmente. Leggere indirizzo completo, importo, commissione reale e
+   totale nel dialogo. Nella prima prova scegliere **Annulla** e verificare
+   l'evento USER_CANCELLED, senza invio.
+5. Ripetere e confermare **Invia** solo dopo aver verificato il destinatario.
+   Registrare privatamente l'idem pubblico restituito, poi richiamare
+   GetLastSendStatus e verificare anche il wallet destinatario.
+6. `LOCAL_UNCONFIRMED` può provenire dall'inserimento locale dell'SDK e non
+   dimostra accettazione in rete. `CONFIRMED` con altezza >=0 deriva dalla
+   storia SPV dell'SDK, senza garanzia di finalità irreversibile.
+7. Chiudere e riaprire l'app, riaprire il wallet e verificare nuovamente stato,
+   indirizzo e saldo. In caso di esito incerto non creare un altro pagamento:
+   leggere lo stato; se necessario RetryLastSendNexa ritrasmette lo stesso.
+
+Non è ancora verificato sul dispositivo l'invio della 0.0.9. Build AIX, test
+del controller e ispezione ZIP non sostituiscono compilazione APK e prova reale.
+
+## Stati ed errori
+
+`NO_SEND`: nessuna autorizzazione salvata. `APPROVED`: autorizzazione persistita,
+possibile interruzione prima/durante la consegna all'SDK. `SDK_SUBMITTED`: chiamata
+SDK terminata senza eccezioni, senza ACK remoto. `UNKNOWN`: errore dopo possibile
+consegna all'SDK. `LOCAL_UNCONFIRMED`: storia locale senza conferma.
+`CONFIRMED`: altezza SDK >=0. `REMOVED_OR_INVALID`: sentinella SDK Long.MIN_VALUE.
+
+Un solo pagamento irrisolto blocca nuovi pagamenti (`SEND_PENDING`), anche dopo
+riavvio. Non si sblocca automaticamente se respinto o rimosso; serve diagnosi.
+Nessun blocco cancella una transazione già approvata o aumenta la commissione.
+Il journal contiene byte firmati e metadati pubblici in preferenze private
+Android, senza password, seed o chiavi private. Il checksum rileva corruzione
+accidentale, non un attaccante con accesso al processo.
+
+Prima del consenso, annullamento, scadenza dopo due minuti o background rilasciano
+solo la bozza corrente tramite abortTransaction. Dopo il consenso nessuna pulizia
+automatica libera gli input. Un arresto forzato prima del consenso può lasciare
+prenotazioni SDK: la candidata non implementa un recupero mirato dopo tale crash.
+Non usare cleanReserved/cleanUnconfirmed indiscriminatamente, non cancellare il
+database e non ricreare il wallet per risolverlo. `SEND_CLEANUP_FAILED` richiede
+diagnosi prima di riprovare; il riavvio non prova che le prenotazioni siano libere.
+
+## Fonti Nexa
+
+Corpus Nexa AI Skills commit 3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24:
+
+| API / regola | File sorgente nel corpus |
+| --- | --- |
+| 1 NEXA = 100 sat; Long | skills/nexa-transaction-construction/SKILL.md, mental model |
+| PayAddress, type.isValid, chainSelector, lockingScript | skills/nexa-identity-and-addresses/validateHelpers.kt |
+| txFor, txOutputFor, FUND_NATIVE, SIGN, txCompleter, send, abortTransaction | skills/nexa-transaction-construction/SKILL.md, pattern 6 |
+| Parametri completi txCompleter e minConfirms | skills/nexa-transaction-construction/txCompletionReference.md |
+| dust(chain), txOutputFor | skills/nexa-transaction-construction/simpleapi-cheatsheet.md |
+| txFor con BCHserialized/NETWORK | skills/nexa-transaction-construction/SKILL.md, pattern 5 |
+| getTx, confirmedHeight | skills/nexa-transaction-construction/SKILL.md, pattern 4 |
+| broadcastTransaction(byte[]) | skills/nexa-transaction-construction/SKILL.md, pattern 3 |
+
+Firme Java controllate compilando contro 0.7.5. La mancanza di ACK remoto è
+verificata anche nell'implementazione ufficiale wallet.kt/cnxnmgr.kt del tag.
+Conferma nativa, journal, checksum, scadenza, limite commissione e blocco di
+pagamenti successivi sono regole applicative, non API o garanzie Nexa.
+Architettura e piano precedenti al codice: ../docs/SEND-NEXA-DESIGN.md.
+
+## Ricostruzione
+
+Rush, JDK21 e dipendenze congelate. Per ricostruire le dipendenze SDK vedere
+../packaging-probe/sdk-upgrade: non sostituire gli AAR con versioni Maven diverse.
+Con una directory runtime già preparata:
+
+```sh
+python3 tools/restore_deps.py /percorso/dipendenze-congelate
+tools/test_wallet_session.sh
+rush build
+python3 tools/compat_aix.py
+python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.9.aix \
+  --baseline-aix ../dist/NexaPackagingProbe-0.0.8.aix \
+  --jni-aar deps/libnexajni-release.aar
+```
+
+Le dipendenze e gli output intermedi sono ignorati da Git. Il modulo precedente
+packaging-probe conserva il suo profilo di ricostruzione storico.

@@ -1,0 +1,2 @@
+-keep @com.google.appinventor.components.annotations.Extension public class * { public *; }
+-dontwarn androidx.annotation.**

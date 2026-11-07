@@ -1,4 +1,21 @@
-# NexaPackagingProbe 0.0.8 — candidata con SDK 0.7.5
+# NexaPackagingProbe — artefatti
+
+## Candidata 0.0.9 — SendNexa testnet
+
+Nuovo modulo sorgenti: `../wallet-extension`. SDK 0.7.5 e blocchi della 0.0.8
+conservati. Aggiunge preparazione, conferma Android con commissione reale,
+annullamento della bozza, stato e ritrasmissione degli stessi byte approvati.
+Il ritorno dell'SDK non dimostra accettazione in rete. Istruzioni complete,
+fonti delle API e limiti: `../wallet-extension/README.md`.
+
+79 test del controller superati; compilazione AIX e verifiche statiche completate.
+Invio Android e comportamento effettivo in rete ancora da provare sul telefono.
+Aggiornare lo stesso progetto senza cancellare i dati; prima prova: annullare
+una bozza, poi inviare un piccolo importo testnet verificando il destinatario.
+Pubblicazione autorizzata sul ramo dedicato. Disponibile anche lo ZIP: estrarre
+il file .aix prima di importarlo in App Inventor.
+
+## Storico: NexaPackagingProbe 0.0.8 con SDK 0.7.5
 
 Scaricare **NexaPackagingProbe-0.0.8.aix** per provare il nuovo SDK su un progetto
 testnet separato. La 0.0.7 resta la baseline già verificata dall'utente sul telefono.
