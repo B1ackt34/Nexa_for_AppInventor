@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Experimental testnet wallet. Testnet only. Payments require a native confirmation dialog. */
 @Extension(description = "Experimental Nexa testnet wallet with manual Electrum fast sync.")
-@DesignerComponent(version = 9, description = "Experimental Nexa testnet wallet",
+@DesignerComponent(version = 10, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
 public final class NexaPackagingProbe extends AndroidNonvisibleComponent implements OnPauseListener, OnStopListener, OnResumeListener {
@@ -151,8 +151,12 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent impleme
   }
 
   private void walletOperation(String operation, String secret, Consumer<GuardedRequest> work) {
+    walletOperation(operation, secret, null, work);
+  }
+
+  private void walletOperation(String operation, String secret, String secondSecret, Consumer<GuardedRequest> work) {
     if (!gate.active()) return;
-    GuardedRequest request = new GuardedRequest(gate, secret, current -> {
+    GuardedRequest request = new GuardedRequest(gate, secret, secondSecret, current -> {
       try {
         work.accept(current);
       } catch (WalletSession.Failure failure) {
@@ -350,6 +354,18 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent impleme
       post(request.token, () -> WalletCreated(phrase));
     });
   }
+
+  @SimpleFunction(description = "Restore a 12-word English testnet recovery phrase into an absent wallet only. Passphrase is the new local encryption password (12+ characters). Rejects existing wallet data. WalletRestored does not imply synchronized funds. Never log or persist the input phrase in App Inventor.")
+  public void RestoreWallet(String recoveryPhrase, String passphrase) {
+    screen.trackPhrase(recoveryPhrase);
+    walletOperation("RestoreWallet", recoveryPhrase, passphrase, request -> {
+      walletSession().restore(request.secret(), request.secondSecret(), request::valid);
+      post(request.token, this::WalletRestored);
+    });
+  }
+
+  @SimpleEvent(description = "Wallet recovered, encrypted, saved and keys locked. No secrets returned. ConfirmBackup separately; wait for synchronization before trusting balance.")
+  public void WalletRestored() { EventDispatcher.dispatchEvent(this, "WalletRestored"); }
 
   @SimpleFunction(description = "Reopen the existing testnet wallet with its passphrase. Never creates or resets a wallet.")
   public void OpenWallet(String passphrase) {

@@ -1,11 +1,20 @@
-# Candidata 0.0.9: invio NEXATESTNET
+# Candidata 0.0.10: RestoreWallet su NEXATESTNET
 
-Mantiene tipo del componente, blocchi precedenti e database della 0.0.8.
+Mantiene tipo del componente, blocchi precedenti e database della 0.0.9.
 Non occorre creare un altro wallet o cancellare i dati. Richiede Android 10/API29.
 SDK libnexakotlin 0.7.5 compilato dal tag ufficiale; 53 dipendenze e hash in
 SDK-PROVENANCE.json, identici alla 0.0.8. Nessuna nuova libreria Android.
 
-## Blocchi nuovi
+## Ripristino aggiunto nella 0.0.10
+
+`RestoreWallet(recoveryPhrase, passphrase)` e `WalletRestored()` recuperano una
+frase valida di 12 parole solo se non esiste già un wallet. Nessun reset.
+La password cifra la nuova copia locale. Attendere sync prima di verificare fondi.
+Istruzioni: [prova separata](RESTORE-TEST.md). Piano e fonti: ../docs/RESTORE-WALLET-DESIGN.md.
+Validatore SDK ufficiale bip39ProcessRecoverySecret autorizzato come eccezione
+ai Nexa AI Skills dall’utente il 2026-11-12; sorgente ufficiale bip39.kt, release0.7.5.
+
+## Blocchi di invio già presenti
 
 - `SendNexa(address, amountNexa, maxFeeNexa, passphrase)`: prepara e firma una
   transazione, riblocca le chiavi e mostra un dialogo Android protetto. Solo il
@@ -50,8 +59,12 @@ Gli errori passano attraverso `WalletFailed(operation,code,message)`.
    indirizzo e saldo. In caso di esito incerto non creare un altro pagamento:
    leggere lo stato; se necessario RetryLastSendNexa ritrasmette lo stesso.
 
-Non è ancora verificato sul dispositivo l'invio della 0.0.9. Build AIX, test
-del controller e ispezione ZIP non sostituiscono compilazione APK e prova reale.
+L'utente ha confermato sul telefono invio e ricezione testnet, stato CONFIRMED
+nel controllo dopo riavvio, rifiuto di password errata/rete sbagliata/fondi
+insufficienti, annullamento, scadenza e recupero della bozza dopo background.
+Il saldo è risultato corretto nelle ultime prove. Esiti e limiti del collaudo
+manuale, distinti dai 79 test del controller, sono registrati in history/VALIDATION-0.0.9.md
+(aggiornamento 2026-11-12).
 
 ## Stati ed errori
 
@@ -106,10 +119,11 @@ Con una directory runtime già preparata:
 ```sh
 python3 tools/restore_deps.py /percorso/dipendenze-congelate
 tools/test_wallet_session.sh
+python3 tools/test_recovery_sdk.py
 rush build
 python3 tools/compat_aix.py
-python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.9.aix \
-  --baseline-aix ../dist/NexaPackagingProbe-0.0.8.aix \
+python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.10.aix \
+  --baseline-aix ../dist/NexaPackagingProbe-0.0.9.aix \
   --jni-aar deps/libnexajni-release.aar
 ```
 

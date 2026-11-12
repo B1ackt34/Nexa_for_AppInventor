@@ -1,5 +1,15 @@
 # NexaPackagingProbe — artefatti
 
+## Candidata 0.0.10 — ripristino da frase
+
+File: NexaPackagingProbe-0.0.10.aix, disponibile anche nello ZIP omonimo.
+Aggiunge RestoreWallet(recoveryPhrase, passphrase) e WalletRestored(), conserva
+blocchi e wallet precedenti e rifiuta un database già presente. SDK 0.7.5 invariato.
+102 test del controller e 7 del validatore SDK superati; build/packaging verificati.
+Il recupero effettivo sul telefono resta da collaudare: usare un’app testnet
+separata, non cancellare i dati dell’app principale. Procedura completa:
+[prova RestoreWallet](../wallet-extension/RESTORE-TEST.md).
+
 ## Candidata 0.0.9 — SendNexa testnet
 
 Nuovo modulo sorgenti: `../wallet-extension`. SDK 0.7.5 e blocchi della 0.0.8
@@ -9,7 +19,11 @@ Il ritorno dell'SDK non dimostra accettazione in rete. Istruzioni complete,
 fonti delle API e limiti: `../wallet-extension/README.md`.
 
 79 test del controller superati; compilazione AIX e verifiche statiche completate.
-Invio Android e comportamento effettivo in rete ancora da provare sul telefono.
+Collaudo manuale confermato dall'utente: invio/ricezione testnet, stato confermato
+nel controllo dopo riavvio, errori di password/rete/saldo, annullamento, scadenza
+e ritorno dal background con nuova bozza annullabile e saldo corretto.
+Riepilogo e prove ancora da eseguire: `../wallet-extension/VALIDATION.md`
+(aggiornamento 2026-11-12).
 Aggiornare lo stesso progetto senza cancellare i dati; prima prova: annullare
 una bozza, poi inviare un piccolo importo testnet verificando il destinatario.
 Pubblicazione autorizzata sul ramo dedicato. Disponibile anche lo ZIP: estrarre

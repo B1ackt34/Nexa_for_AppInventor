@@ -51,6 +51,26 @@ final class NexaWalletStorage implements WalletSession.Storage {
     return context.getSharedPreferences(NAME, Context.MODE_PRIVATE).getBoolean("backup_confirmed", false);
   }
 
+  public boolean hasRestoreArtifacts() {
+    for (String suffix : new String[] {"", "-wal", "-shm", "-journal"}) {
+      if (context.getDatabasePath(NAME + ".db" + suffix).exists()) return true;
+    }
+    return false;
+  }
+
+  public boolean hasSendRecord() {
+    return context.getSharedPreferences(NAME + "_send", Context.MODE_PRIVATE).contains("approved");
+  }
+
+  public String validateRecoveryPhrase(String phrase) { return RecoveryPhrase.validate(phrase); }
+
+  public WalletSession.Handle restore(String phrase) {
+    if (hasRestoreArtifacts()) throw new WalletSession.Failure("WALLET_EXISTS", "Existing wallet data will not be replaced.");
+    // Nexa AI Skills: nexa-wallet-lifecycle-and-chain/SKILL.md pattern 2;
+    // recoveryFlow.md Restore flow: recoverWallet scans historical transactions.
+    return new Adapter(InitKt.recoverWallet(NAME, phrase, ChainSelector.NEXATESTNET), true);
+  }
+
   public void resetBackup() {
     if (!context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
         .edit().putBoolean("backup_confirmed", false).commit()) {

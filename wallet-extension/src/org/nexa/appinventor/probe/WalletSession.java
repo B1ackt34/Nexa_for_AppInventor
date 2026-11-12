@@ -66,6 +66,10 @@ final class WalletSession {
     boolean exists();
     Handle create();
     Handle open();
+    default boolean hasRestoreArtifacts() { return exists(); }
+    default boolean hasSendRecord() { return approvedSend() != null; }
+    default String validateRecoveryPhrase(String phrase) { throw new UnsupportedOperationException(); }
+    default Handle restore(String phrase) { throw new UnsupportedOperationException(); }
     void resetBackup();
     boolean backupConfirmed();
     void confirmBackup();
@@ -178,6 +182,49 @@ final class WalletSession {
       address = null;
       try { lockKeys(); } catch (Exception | LinkageError ignored) { }
       throw failure;
+    }
+  }
+
+  synchronized void restore(String recoveryPhrase, String passphrase, BooleanSupplier permitted) {
+    prepare();
+    long ticket = epoch.get();
+    checkpoint(ticket, permitted);
+    requireNoFastSync();
+    if (handle != null || storage.hasRestoreArtifacts())
+      throw new Failure("WALLET_EXISTS", "Existing wallet data will not be replaced. Use OpenWallet.");
+    if (storage.hasSendRecord())
+      throw new Failure("ORPHANED_SEND_RECORD", "A payment record exists without a wallet. Restore is blocked pending diagnosis.");
+    requirePassphrase(passphrase);
+    String normalized = storage.validateRecoveryPhrase(recoveryPhrase);
+    checkpoint(ticket, permitted);
+    address = null;
+    String phase = "INITIALIZE_BACKUP";
+    try {
+      storage.resetBackup();
+      checkpoint(ticket, permitted);
+      phase = "RECOVER";
+      handle = storage.restore(normalized);
+      // Finish encryption/save even if backgrounded during the SDK call.
+      // recoveryFlow.md Restore flow plus create flow persistence and lock rules.
+      phase = "ENCRYPT";
+      handle.encrypt(passphrase);
+      phase = "SAVE";
+      handle.save();
+      checkpoint(ticket, permitted);
+      phase = "READ_ADDRESS";
+      String candidate = handle.currentTestnetAddress();
+      phase = "RELOCK";
+      lockKeys();
+      checkpoint(ticket, permitted);
+      address = candidate;
+    } catch (Exception | LinkageError failure) {
+      address = null;
+      if (handle != null) {
+        try { lockKeys(); } catch (Exception | LinkageError ignored) { }
+      }
+      if (failure instanceof Failure) throw (Failure) failure;
+      throw new Failure("RESTORE_FAILED", "RestoreWallet failed during " + phase
+          + ". Existing or partially restored wallet data was not deleted or replaced.");
     }
   }
 

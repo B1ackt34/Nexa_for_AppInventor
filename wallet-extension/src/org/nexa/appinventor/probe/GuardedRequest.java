@@ -9,13 +9,19 @@ final class GuardedRequest implements Runnable {
   private final Consumer<GuardedRequest> work;
   private final Consumer<GuardedRequest> done;
   private volatile String secret;
+  private volatile String secondSecret;
   private volatile boolean cancelled;
 
   GuardedRequest(ForegroundGate gate, String secret, Consumer<GuardedRequest> work,
       Consumer<GuardedRequest> done) {
+    this(gate, secret, null, work, done);
+  }
+  GuardedRequest(ForegroundGate gate, String secret, String secondSecret,
+      Consumer<GuardedRequest> work, Consumer<GuardedRequest> done) {
     this.gate = gate;
     this.token = gate.capture();
     this.secret = secret;
+    this.secondSecret = secondSecret;
     this.work = work;
     this.done = done;
   }
@@ -24,10 +30,14 @@ final class GuardedRequest implements Runnable {
     if (!valid()) throw new WalletSession.Failure("SESSION_LOCKED", "Return to the app and reopen the wallet.");
     return secret;
   }
-  boolean retainsSecret() { return secret != null; }
-  void cancel() { cancelled = true; secret = null; }
+  String secondSecret() {
+    if (!valid()) throw new WalletSession.Failure("SESSION_LOCKED", "Return to the app and reopen the wallet.");
+    return secondSecret;
+  }
+  boolean retainsSecret() { return secret != null || secondSecret != null; }
+  void cancel() { cancelled = true; secret = null; secondSecret = null; }
   public void run() {
     try { if (valid()) work.accept(this); }
-    finally { secret = null; done.accept(this); }
+    finally { secret = null; secondSecret = null; done.accept(this); }
   }
 }

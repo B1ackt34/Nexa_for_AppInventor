@@ -10,7 +10,9 @@ source_root="$probe_root/src/org/nexa/appinventor/probe"
   "$source_root/SendData.java" "$source_root/WalletSession.java" "$source_root/WalletBalance.java" \
   "$source_root/ForegroundGate.java" "$source_root/GuardedRequest.java" \
   "$probe_root/tests/org/nexa/appinventor/probe/WalletSessionTest.java" \
-  "$probe_root/tests/org/nexa/appinventor/probe/SendSessionTest.java"
+  "$probe_root/tests/org/nexa/appinventor/probe/SendSessionTest.java" \
+  "$probe_root/tests/org/nexa/appinventor/probe/RestoreSessionTest.java"
 "$runner" -cp "$test_output" org.nexa.appinventor.probe.WalletSessionTest
 
 "$runner" -cp "$test_output" org.nexa.appinventor.probe.SendSessionTest
+"$runner" -cp "$test_output" org.nexa.appinventor.probe.RestoreSessionTest

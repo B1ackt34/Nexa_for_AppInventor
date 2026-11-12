@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the 0.0.9 candidate's backward-compatible blocks and JNI boundary.
+"""Check the 0.0.10 candidate's backward-compatible blocks and JNI boundary.
 
 Static archive checks only. Does not claim Android execution or wallet migration.
 """
@@ -24,29 +24,31 @@ def signatures(component, field):
 def inspect(args):
     with ZipFile(args.baseline_aix) as baseline:
         old = json.loads(baseline.read(PREFIX + 'components.json'))[0]
-    assert old['versionName'] == '0.0.8'
+    assert old['versionName'] == '0.0.9'
     with ZipFile(args.aix) as archive:
         assert archive.testzip() is None
         assert all(item.file_size < 5 * 1024 * 1024 for item in archive.infolist())
         component = json.loads(archive.read(PREFIX + 'components.json'))[0]
-        assert component['version'] == '9' and component['versionName'] == '0.0.9'
+        assert component['version'] == '10' and component['versionName'] == '0.0.10'
         assert component['type'] == old['type']
         assert component['androidMinSdk'] == '29' and component['external'] == 'true'
         for field in ['methods', 'events']:
             current = signatures(component, field)
-            added = {'SendNexa', 'CancelSendNexa', 'GetLastSendStatus', 'RetryLastSendNexa'} if field == 'methods' else {'SendNexaPrepared', 'SendNexaSubmitted', 'SendNexaCancelled', 'SendNexaStatus'}
+            added = {'RestoreWallet'} if field == 'methods' else {'WalletRestored'}
             assert set(current) == set(signatures(old, field)) | added
             for name, value in signatures(old, field).items():
                 assert current[name] == value, name
         methods = {m['name']: m for m in component['methods']}
+        assert methods['RestoreWallet']['params'] == [{'name': name, 'type': 'text'} for name in ['recoveryPhrase', 'passphrase']]
         assert methods['SendNexa']['params'] == [{'name': name, 'type': 'text'} for name in ['address', 'amountNexa', 'maxFeeNexa', 'passphrase']]
         for name in ['CancelSendNexa', 'GetLastSendStatus', 'RetryLastSendNexa']:
             assert methods[name]['params'] == []
         events = {e['name']: e for e in component['events']}
+        assert events['WalletRestored']['params'] == []
         for name, params in {'SendNexaPrepared': ['requestId', 'address', 'amount', 'fee', 'total'], 'SendNexaSubmitted': ['idem'], 'SendNexaCancelled': ['requestId', 'reason'], 'SendNexaStatus': ['idem', 'state', 'confirmedHeight']}.items():
             assert events[name]['params'] == [{'name': p, 'type': 'text'} for p in params]
         props = signatures(component, 'blockProperties')
-        assert props.pop('SendInProgress')['type'] == 'boolean'
+        assert props['SendInProgress']['type'] == 'boolean'
         assert props == signatures(old, 'blockProperties')
         info = json.loads(archive.read(PREFIX + 'files/component_build_infos.json'))[0]
         for library in info['libraries']:
@@ -75,7 +77,7 @@ def inspect(args):
             for name in expected:
                 data = aar.read(name)
                 assert data.startswith(b'\x7fELF') and data == source.read(name), name
-    print('PASS: existing block signatures unchanged; four send methods/events and SendInProgress added')
+    print('PASS: existing block signatures unchanged; RestoreWallet and WalletRestored added')
     print('PASS: DEX, Startup, original JNI class names and eight unchanged native binaries')
     print('PASS: all archive entries below 5 MiB')
     print('SHA256:', hashlib.sha256(args.aix.read_bytes()).hexdigest())

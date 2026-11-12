@@ -217,25 +217,32 @@
       "sha256": "8d0fd2aeb48d19dc49c563ebc00f274947e45f716c107535c12ead63decd688d"
     }
   },
-  "baseline_commit": "053eb92bb11223913f06ab3c1a79bda927977652",
+  "baseline_commit": "b1d1ce9f3a7478c80899c58aa1942ea748906d00",
   "source_java_sha256": {
     "src/org/nexa/appinventor/probe/ForegroundGate.java": "15aa2c60aec49ffb84c9ef6963ce708fd51eab13b134ebeeb8e679528e578ef3",
-    "src/org/nexa/appinventor/probe/GuardedRequest.java": "bbc3f3467554499da576849087c73c2797c301b7225edcb1da1886c05a578e8d",
-    "src/org/nexa/appinventor/probe/NexaPackagingProbe.java": "f41b7ca8a029df7f9a8b68d96a92a3e3f5208ea264853214d1ab991970a74f59",
-    "src/org/nexa/appinventor/probe/NexaWalletStorage.java": "84302d173eb40ba09db70f2530c85a8a5832089f826e6b29f3b1ab5c7ce7401a",
+    "src/org/nexa/appinventor/probe/GuardedRequest.java": "36333f5d5c9b21fe6544e0afaaab7ca2c8b73a0dbadc777a95a23e1c7c1ef06a",
+    "src/org/nexa/appinventor/probe/NexaPackagingProbe.java": "1625b86d5c09aa7a9cd655753b05d09dd8d34a4d19ac26c067dc7498a6a9b161",
+    "src/org/nexa/appinventor/probe/NexaWalletStorage.java": "5aca68a82d8af1188242527839e12328948ebd5abe696d11b73098eb6a7d1644",
+    "src/org/nexa/appinventor/probe/RecoveryPhrase.java": "c57035e2252cd726285162a8d5bdf42846b209c3c5ea54f28c1086fedae4671d",
     "src/org/nexa/appinventor/probe/SendData.java": "e5eff06e2a17694baeea4e7957cbef56f3ea55c8f17ca9f24d09a251168445c6",
     "src/org/nexa/appinventor/probe/SensitiveScreen.java": "6c7660c98a9dc5403582b02ad921d4930ab166a0ab919a342275cd78ab992ddb",
     "src/org/nexa/appinventor/probe/WalletBalance.java": "3b56174bd57f6bfec0600092244dd9dba94cafc54f1a3088d1d390bc37c731b9",
-    "src/org/nexa/appinventor/probe/WalletSession.java": "98c9dc69cbef9af3b930a87bff010ac859692f8a5677176b37d4ecc064bf3954"
+    "src/org/nexa/appinventor/probe/WalletSession.java": "fca495b08e7a315092b756b24302d3eef3928ddfba804b980c7b9d7625d3eaef"
   },
   "build": {
-    "extension_version": "0.0.9",
+    "extension_version": "0.0.10",
     "rush": "2.1.2",
     "min_sdk": 29,
     "upstream_compile_sdk": 37,
-    "controller_tests_passed": 79,
+    "controller_tests_passed": 102,
     "runtime_android_tested": false,
-    "real_transaction_tested": false
+    "real_transaction_tested": false,
+    "sdk_validator_tests_passed": 7
   },
-  "artifact_sha256": "68e2677551932476403a74dcf7922a6ee47bc1aedabfef4a16b45c79348e42e6"
+  "artifact_sha256": "d5125b6a67863b716074c56b0198ea4c745de6d8f80d1c44547218ef9526270c",
+  "sdk_api_exception": {
+    "api": "Bip39Kt.bip39ProcessRecoverySecret(String, boolean)",
+    "source": "libnexakotlin/src/commonMain/kotlin/bip39.kt, release-0.7.5",
+    "user_authorized": "2026-11-12"
+  }
 }
