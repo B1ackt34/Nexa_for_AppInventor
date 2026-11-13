@@ -25,6 +25,7 @@ Riepilogo aggiornato al 2026-11-13 in
 Verificata anche la ritrasmissione in attesa di conferma: stesso idem, un solo
 movimento al destinatario e successivo CONFIRMED; ALREADY_CONFIRMED su pagamento
 già confermato. Guida ai blocchi: [APP-INVENTOR-GUIDE.md](APP-INVENTOR-GUIDE.md).
+English guide: [APP-INVENTOR-GUIDE.en.md](APP-INVENTOR-GUIDE.en.md).
 
 ## Blocchi di invio già presenti
 

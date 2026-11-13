@@ -16,6 +16,7 @@ Riepilogo al 2026-11-13 in
 Ritrasmissione manuale verificata con idem invariato, un solo movimento ricevuto
 e successivo CONFIRMED; rifiuto ALREADY_CONFIRMED sul pagamento già confermato.
 Guida: [blocchi App Inventor](../wallet-extension/APP-INVENTOR-GUIDE.md).
+English: [App Inventor blocks](../wallet-extension/APP-INVENTOR-GUIDE.en.md).
 Per ulteriori prove usare un’app testnet separata, senza cancellare i dati
 dell’app principale. Procedura completa:
 [prova RestoreWallet](../wallet-extension/RESTORE-TEST.md).

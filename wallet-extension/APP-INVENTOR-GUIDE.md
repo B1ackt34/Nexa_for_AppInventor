@@ -1,5 +1,7 @@
 # Usare NexaPackagingProbe 0.0.10 in App Inventor
 
+[English version](APP-INVENTOR-GUIDE.en.md)
+
 Baseline funzionale NEXATESTNET, Android 10/API29 o superiore. Importare il file
 .aix come estensione e aggiungere il componente non visibile alla Form del
 wallet. Il nome del componente rimane NexaPackagingProbe. LibNexaVersion indica
