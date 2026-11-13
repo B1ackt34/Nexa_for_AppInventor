@@ -1,6 +1,7 @@
-# Prova RestoreWallet — candidata 0.0.10
+# Prova RestoreWallet — 0.0.10
 
-Solo NEXATESTNET. La 0.0.9 resta la baseline collaudata. Questa candidata aggiunge
+Solo NEXATESTNET. La 0.0.10 è la baseline funzionale per i casi confermati
+dall'utente; riepilogo del collaudo e casi aperti in VALIDATION.md. Questa versione aggiunge
 `RestoreWallet(recoveryPhrase, passphrase)` e l'evento `WalletRestored()`.
 Richiede 12 parole inglesi valide; la password è la nuova password locale di
 almeno 12 caratteri, non una passphrase BIP39 aggiuntiva.
@@ -65,5 +66,6 @@ atomico tale intervallo. Non cancellare i dati dell'app principale per aggirarlo
 
 Il checksum rileva errori della frase, non certifica identità, provenienza o
 appartenenza al wallet desiderato. Le String in Java/App Inventor non consentono
-di garantire la cancellazione del segreto dalla memoria. SDK/JNI e recupero
-effettivo dei fondi devono ancora essere collaudati sul dispositivo con la 0.0.10.
+di garantire la cancellazione del segreto dalla memoria. Il recupero effettivo
+dei fondi e la riapertura sono stati confermati dall'utente con la 0.0.10;
+gli altri casi manuali ancora aperti sono elencati in VALIDATION.md.

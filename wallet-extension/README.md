@@ -1,4 +1,4 @@
-# Candidata 0.0.10: RestoreWallet su NEXATESTNET
+# Baseline funzionale 0.0.10: RestoreWallet su NEXATESTNET
 
 Mantiene tipo del componente, blocchi precedenti e database della 0.0.9.
 Non occorre creare un altro wallet o cancellare i dati. Richiede Android 10/API29.
@@ -13,6 +13,18 @@ La password cifra la nuova copia locale. Attendere sync prima di verificare fond
 Istruzioni: [prova separata](RESTORE-TEST.md). Piano e fonti: ../docs/RESTORE-WALLET-DESIGN.md.
 Validatore SDK ufficiale bip39ProcessRecoverySecret autorizzato come eccezione
 ai Nexa AI Skills dall’utente il 2026-11-12; sorgente ufficiale bip39.kt, release0.7.5.
+
+Collaudo manuale confermato dall'utente: recupero dei fondi precedenti dopo sync,
+riapertura con nuova password, rifiuto di wallet già presente con saldo corretto
+e rifiuto della frase incompleta, del checksum errato, della parola fuori
+dizionario e della password troppo corta. Verificati anche riapertura dopo
+background e invio dei fondi recuperati, ricevuti dal destinatario e poi CONFIRMED.
+La tempistica del background durante il recupero non è stata accertata.
+Riepilogo aggiornato al 2026-11-13 in
+[VALIDATION.md](VALIDATION.md), con verifiche automatiche e casi ancora aperti.
+Verificata anche la ritrasmissione in attesa di conferma: stesso idem, un solo
+movimento al destinatario e successivo CONFIRMED; ALREADY_CONFIRMED su pagamento
+già confermato. Guida ai blocchi: [APP-INVENTOR-GUIDE.md](APP-INVENTOR-GUIDE.md).
 
 ## Blocchi di invio già presenti
 

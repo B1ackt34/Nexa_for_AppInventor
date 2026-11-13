@@ -1,13 +1,23 @@
 # NexaPackagingProbe — artefatti
 
-## Candidata 0.0.10 — ripristino da frase
+## Baseline funzionale testnet 0.0.10 — ripristino da frase
 
 File: NexaPackagingProbe-0.0.10.aix, disponibile anche nello ZIP omonimo.
 Aggiunge RestoreWallet(recoveryPhrase, passphrase) e WalletRestored(), conserva
 blocchi e wallet precedenti e rifiuta un database già presente. SDK 0.7.5 invariato.
 102 test del controller e 7 del validatore SDK superati; build/packaging verificati.
-Il recupero effettivo sul telefono resta da collaudare: usare un’app testnet
-separata, non cancellare i dati dell’app principale. Procedura completa:
+L'utente ha confermato recupero dei fondi precedenti dopo sincronizzazione,
+riapertura con nuova password, rifiuto del wallet già presente con saldo corretto
+e rifiuto di frase incompleta, checksum errato, parola fuori dizionario e password
+troppo corta. Verificati riapertura dopo background e invio dei fondi recuperati,
+ricevuti e successivamente CONFIRMED. Background durante il recupero non accertato.
+Riepilogo al 2026-11-13 in
+[VALIDATION.md](../wallet-extension/VALIDATION.md).
+Ritrasmissione manuale verificata con idem invariato, un solo movimento ricevuto
+e successivo CONFIRMED; rifiuto ALREADY_CONFIRMED sul pagamento già confermato.
+Guida: [blocchi App Inventor](../wallet-extension/APP-INVENTOR-GUIDE.md).
+Per ulteriori prove usare un’app testnet separata, senza cancellare i dati
+dell’app principale. Procedura completa:
 [prova RestoreWallet](../wallet-extension/RESTORE-TEST.md).
 
 ## Candidata 0.0.9 — SendNexa testnet
@@ -22,7 +32,7 @@ fonti delle API e limiti: `../wallet-extension/README.md`.
 Collaudo manuale confermato dall'utente: invio/ricezione testnet, stato confermato
 nel controllo dopo riavvio, errori di password/rete/saldo, annullamento, scadenza
 e ritorno dal background con nuova bozza annullabile e saldo corretto.
-Riepilogo e prove ancora da eseguire: `../wallet-extension/VALIDATION.md`
+Riepilogo e prove ancora da eseguire: `../wallet-extension/history/VALIDATION-0.0.9.md`
 (aggiornamento 2026-11-12).
 Aggiornare lo stesso progetto senza cancellare i dati; prima prova: annullare
 una bozza, poi inviare un piccolo importo testnet verificando il destinatario.

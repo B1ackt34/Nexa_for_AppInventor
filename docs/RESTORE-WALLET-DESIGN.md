@@ -112,4 +112,13 @@ escluso dall'utente dai blocchi al progetto; resta un limite documentato.
 
 Stato: analisi e piano completati; eccezione autorizzata. Implementazione
 della candidata 0.0.10 compilata e verificata staticamente; pacchetto 0.0.9 conservato.
-Collaudo Android del ripristino ancora da eseguire.
+Aggiornamento 2026-11-13: l'utente ha confermato sul telefono recupero dei fondi
+storici dopo sync, riapertura con nuova password, rifiuto del wallet già presente
+con saldo corretto e rifiuto della frase incompleta. La 0.0.10 è adottata come
+baseline funzionale testnet per questi casi; esiti e verifiche ancora aperte in
+../wallet-extension/VALIDATION.md. Nessuna nuova build richiesta dall'aggiornamento
+del riepilogo. Ulteriori esiti riferiti dall'utente: rifiuto di checksum errato,
+parola fuori dizionario e password troppo corta; riapertura dopo background
+con indirizzo/saldo corretti; spesa dei fondi recuperati, ricevuti dal destinatario
+e successivamente CONFIRMED. Non è accertato che il background sia avvenuto
+durante recoverWallet: questo scenario resta aperto sul dispositivo.
