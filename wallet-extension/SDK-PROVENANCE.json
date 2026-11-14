@@ -217,12 +217,13 @@
       "sha256": "8d0fd2aeb48d19dc49c563ebc00f274947e45f716c107535c12ead63decd688d"
     }
   },
-  "baseline_commit": "b1d1ce9f3a7478c80899c58aa1942ea748906d00",
+  "baseline_commit": "21ef58be5552ebab03877f79145dd682095fde5b",
   "source_java_sha256": {
     "src/org/nexa/appinventor/probe/ForegroundGate.java": "15aa2c60aec49ffb84c9ef6963ce708fd51eab13b134ebeeb8e679528e578ef3",
     "src/org/nexa/appinventor/probe/GuardedRequest.java": "36333f5d5c9b21fe6544e0afaaab7ca2c8b73a0dbadc777a95a23e1c7c1ef06a",
-    "src/org/nexa/appinventor/probe/NexaPackagingProbe.java": "1625b86d5c09aa7a9cd655753b05d09dd8d34a4d19ac26c067dc7498a6a9b161",
-    "src/org/nexa/appinventor/probe/NexaWalletStorage.java": "5aca68a82d8af1188242527839e12328948ebd5abe696d11b73098eb6a7d1644",
+    "src/org/nexa/appinventor/probe/NexaPackagingProbe.java": "19c294a0a59e7cfc6c37a188a7a6f4d13cff936b84cf0c2090417452f0724c10",
+    "src/org/nexa/appinventor/probe/NexaWalletStorage.java": "11f9f0ea6fada1cfd1bb98555e49e1939d178a397fd75a340009db6950586d58",
+    "src/org/nexa/appinventor/probe/NoBackupStore.java": "7136c87e2f8fa2c26548b645894e20a069ee733d7838d4f1397e3993d193f62e",
     "src/org/nexa/appinventor/probe/RecoveryPhrase.java": "c57035e2252cd726285162a8d5bdf42846b209c3c5ea54f28c1086fedae4671d",
     "src/org/nexa/appinventor/probe/SendData.java": "e5eff06e2a17694baeea4e7957cbef56f3ea55c8f17ca9f24d09a251168445c6",
     "src/org/nexa/appinventor/probe/SensitiveScreen.java": "6c7660c98a9dc5403582b02ad921d4930ab166a0ab919a342275cd78ab992ddb",
@@ -230,19 +231,28 @@
     "src/org/nexa/appinventor/probe/WalletSession.java": "fca495b08e7a315092b756b24302d3eef3928ddfba804b980c7b9d7625d3eaef"
   },
   "build": {
-    "extension_version": "0.0.10",
+    "extension_version": "0.0.11",
     "rush": "2.1.2",
     "min_sdk": 29,
     "upstream_compile_sdk": 37,
     "controller_tests_passed": 102,
     "runtime_android_tested": false,
     "real_transaction_tested": false,
-    "sdk_validator_tests_passed": 7
+    "sdk_validator_tests_passed": 7,
+    "storage_file_tests_passed": 36,
+    "total_tests_passed": 145,
+    "device_backup_restore_tested": false
   },
-  "artifact_sha256": "d5125b6a67863b716074c56b0198ea4c745de6d8f80d1c44547218ef9526270c",
+  "artifact_sha256": "9489f4481aa45e8688e7fd3004615c9a7f0e35f3170ba9c85a813ac4eac0866c",
   "sdk_api_exception": {
     "api": "Bip39Kt.bip39ProcessRecoverySecret(String, boolean)",
     "source": "libnexakotlin/src/commonMain/kotlin/bip39.kt, release-0.7.5",
     "user_authorized": "2026-11-12"
+  },
+  "storage_candidate": {
+    "scope": "wallet database, SQLite sidecars and extension metadata",
+    "legacy_migration": false,
+    "android_directory_sync": "android.system.Os.open/fsync/close",
+    "android_backup_or_oem_transfer_tested": false
   }
 }

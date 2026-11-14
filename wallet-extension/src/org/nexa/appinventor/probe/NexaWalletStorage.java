@@ -1,6 +1,11 @@
 package org.nexa.appinventor.probe;
 
 import android.content.Context;
+import android.system.Os;
+import android.system.OsConstants;
+import java.io.File;
+import java.io.FileDescriptor;
+import org.json.JSONArray;
 import org.nexa.libnexakotlin.Bip44Wallet;
 import org.nexa.libnexakotlin.ChainSelector;
 import org.nexa.libnexakotlin.InitKt;
@@ -24,97 +29,84 @@ import java.util.function.Consumer;
 /** Adapter for APIs documented in Nexa AI Skills, commit 3c6f3607a02f7fabe2403d3430dbbdb2d7f85d24. */
 final class NexaWalletStorage implements WalletSession.Storage {
   static final String NAME = "nexa_ai2_testnet_v1";
-  private final Context context;
+  private final NoBackupStore store;
 
   NexaWalletStorage(Context context) {
-    this.context = context.getApplicationContext();
+    Context app = context.getApplicationContext();
+    if (legacyArtifacts(app)) throw new WalletSession.Failure("LEGACY_STORAGE_FOUND",
+        "This candidate requires a separate test app. Existing wallet data was not moved or replaced. Keep version 0.0.10 for that app.");
+    store = files(app);
+    store.checkLayout();
   }
 
-  public boolean exists() {
-    // walletStartupTemplate.kt: test the Android database path BEFORE opening it.
-    return context.getDatabasePath(NAME + ".db").exists();
+  private static NoBackupStore files(Context context) {
+    // Android Context.getNoBackupFilesDir; see docs/NO-BACKUP-STORAGE-STUDY.md.
+    return new NoBackupStore(context.getNoBackupFilesDir(), NAME, directory -> {
+      if (!directory.isDirectory()) throw new java.io.IOException();
+      FileDescriptor fd = Os.open(directory.getAbsolutePath(), OsConstants.O_RDONLY, 0);
+      try { Os.fsync(fd); } finally { Os.close(fd); }
+    });
   }
 
-  public WalletSession.Handle create() {
-    // nexa-wallet-lifecycle-and-chain/SKILL.md, pattern 1; initializer defaults to null.
-    return new Adapter(InitKt.newWallet(NAME, ChainSelector.NEXATESTNET, null), true);
+  private static boolean legacyArtifacts(Context context) {
+    return NoBackupStore.hasLegacyArtifacts(context.getDatabasePath(NAME + ".db"),
+        new File(context.getDataDir(), "shared_prefs"), NAME);
   }
 
-  public WalletSession.Handle open() {
-    // Wallet lifecycle pattern 7; recoveryFlow.md: open disconnected, attach later.
-    // Unlike openWallet(), this does not prepare new addresses before unlock.
-    return new Adapter(InitKt.openDisconnectedWallet(NAME), false);
+  static String storageStatus(Context context) {
+    try {
+      NoBackupStore files = files(context.getApplicationContext());
+      JSONObject data = new JSONObject();
+      data.put("diagnosticVersion", 1); data.put("extensionVersion", "0.0.11");
+      data.put("storageRoot", "ANDROID_NO_BACKUP");
+      data.put("legacyArtifactsFound", legacyArtifacts(context));
+      data.put("databaseExists", files.database.exists());
+      data.put("databaseInsideNoBackup", files.contained(files.database));
+      data.put("metadataExists", files.metadata.exists());
+      data.put("metadataInsideNoBackup", files.contained(files.metadata));
+      data.put("temporaryMetadataExists", files.temporary.exists());
+      String layout = "CONSISTENT";
+      try { files.checkLayout(); } catch (WalletSession.Failure error) { layout = error.code; }
+      data.put("layout", layout);
+      JSONArray sidecars = new JSONArray();
+      String[] names = {"WAL", "SHM", "JOURNAL"};
+      File[] paths = files.files();
+      for (int i = 0; i < names.length; i++) {
+        JSONObject item = new JSONObject(); item.put("role", names[i]);
+        item.put("exists", paths[i + 1].exists()); item.put("insideNoBackup", files.contained(paths[i + 1]));
+        sidecars.put(item);
+      }
+      data.put("sidecars", sidecars);
+      data.put("deviceBackupRestoreTested", false); data.put("oemTransferVerified", false);
+      data.put("scope", "WALLET_DATABASE_AND_APP_METADATA_ONLY");
+      data.put("observationsAreAtomic", false);
+      return data.toString();
+    } catch (WalletSession.Failure error) { throw error; }
+    catch (Exception error) { throw NoBackupStore.failure("STORAGE_DIAGNOSTIC_FAILED"); }
   }
 
-  public boolean backupConfirmed() {
-    // App metadata only: contains no password, seed or private key.
-    return context.getSharedPreferences(NAME, Context.MODE_PRIVATE).getBoolean("backup_confirmed", false);
-  }
-
-  public boolean hasRestoreArtifacts() {
-    for (String suffix : new String[] {"", "-wal", "-shm", "-journal"}) {
-      if (context.getDatabasePath(NAME + ".db" + suffix).exists()) return true;
-    }
-    return false;
-  }
-
-  public boolean hasSendRecord() {
-    return context.getSharedPreferences(NAME + "_send", Context.MODE_PRIVATE).contains("approved");
-  }
-
+  public boolean exists() { store.checkLayout(); return store.database.exists(); }
+  public boolean hasRestoreArtifacts() { store.checkLayout(); return store.hasDatabaseArtifacts(); }
+  public boolean hasSendRecord() { return store.approvedSend() != null; }
+  public boolean backupConfirmed() { return store.backupConfirmed(); }
+  public void resetBackup() { store.initialize(); }
+  public void confirmBackup() { store.confirmBackup(); }
+  public SendData.Record approvedSend() { return store.approvedSend(); }
+  public void saveApprovedSend(SendData.Record record) { store.saveApprovedSend(record); }
   public String validateRecoveryPhrase(String phrase) { return RecoveryPhrase.validate(phrase); }
 
+  public WalletSession.Handle create() {
+    // lifecycle/SKILL.md pattern 1. Absolute path flow verified in SDK init.kt,
+    // persist.kt and platformAndroid.kt; no JVM dataDirectory override.
+    return new Adapter(InitKt.newWallet(store.pathForCreate(), ChainSelector.NEXATESTNET, null), true);
+  }
+  public WalletSession.Handle open() {
+    // lifecycle/SKILL.md pattern 7; never create after an open failure.
+    return new Adapter(InitKt.openDisconnectedWallet(store.pathForOpen()), false);
+  }
   public WalletSession.Handle restore(String phrase) {
-    if (hasRestoreArtifacts()) throw new WalletSession.Failure("WALLET_EXISTS", "Existing wallet data will not be replaced.");
-    // Nexa AI Skills: nexa-wallet-lifecycle-and-chain/SKILL.md pattern 2;
-    // recoveryFlow.md Restore flow: recoverWallet scans historical transactions.
-    return new Adapter(InitKt.recoverWallet(NAME, phrase, ChainSelector.NEXATESTNET), true);
-  }
-
-  public void resetBackup() {
-    if (!context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
-        .edit().putBoolean("backup_confirmed", false).commit()) {
-      throw new WalletSession.Failure("BACKUP_SAVE_FAILED", "Could not initialize backup confirmation.");
-    }
-  }
-
-  public void confirmBackup() {
-    boolean saved = context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
-        .edit().putBoolean("backup_confirmed", true).commit();
-    if (!saved) {
-      throw new WalletSession.Failure("BACKUP_SAVE_FAILED", "Could not save the backup confirmation.");
-    }
-  }
-
-  // App-owned journal of ONE approved signed transaction. No password/seed/private key.
-  public SendData.Record approvedSend() {
-    String raw = context.getSharedPreferences(NAME + "_send", Context.MODE_PRIVATE).getString("approved", null);
-    if (raw == null) return null;
-    try {
-      if (raw.length() > 3 * 1024 * 1024) throw new IllegalArgumentException();
-      JSONObject data = new JSONObject(raw);
-      if (data.getInt("version") != 1) throw new IllegalArgumentException();
-      SendData.Record record = new SendData.Record(data.getString("requestId"), data.getString("destination"),
-          data.getLong("amount"), data.getLong("fee"), data.getString("idem"), data.getString("hex"), data.getString("state"));
-      if (!record.checksum().equals(data.getString("checksum"))) throw new IllegalArgumentException();
-      return record;
-    } catch (Exception failure) {
-      throw new WalletSession.Failure("SEND_RECORD_INVALID", "Stored payment is unreadable. New payments are blocked; wallet data are not replaced.");
-    }
-  }
-
-  public void saveApprovedSend(SendData.Record record) {
-    try {
-      JSONObject data = new JSONObject();
-      data.put("version", 1); data.put("requestId", record.requestId);
-      data.put("destination", record.destination); data.put("amount", record.amount); data.put("fee", record.fee);
-      data.put("idem", record.idem); data.put("hex", record.hex); data.put("state", record.state);
-      data.put("checksum", record.checksum());
-      if (!context.getSharedPreferences(NAME + "_send", Context.MODE_PRIVATE).edit().putString("approved", data.toString()).commit())
-        throw new IllegalStateException();
-    } catch (Exception failure) {
-      throw new WalletSession.Failure("SEND_JOURNAL_FAILED", "Could not persist payment authorization. Inspect status before another attempt.");
-    }
+    // lifecycle/SKILL.md pattern 2; recoveryFlow.md: scan historical transactions.
+    return new Adapter(InitKt.recoverWallet(store.pathForCreate(), phrase, ChainSelector.NEXATESTNET), true);
   }
 
   private static final class Adapter implements WalletSession.Handle {

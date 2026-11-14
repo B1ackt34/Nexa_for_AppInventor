@@ -1,9 +1,20 @@
-# Baseline funzionale 0.0.10: RestoreWallet su NEXATESTNET
+# Candidata testnet 0.0.11: wallet in noBackupFilesDir
 
-Mantiene tipo del componente, blocchi precedenti e database della 0.0.9.
-Non occorre creare un altro wallet o cancellare i dati. Richiede Android 10/API29.
-SDK libnexakotlin 0.7.5 compilato dal tag ufficiale; 53 dipendenze e hash in
-SDK-PROVENANCE.json, identici alla 0.0.8. Nessuna nuova libreria Android.
+**Solo app testnet separata, senza wallet precedente. Non aggiornare l'app principale.**
+La 0.0.10 resta la baseline collaudata. Questa candidata conserva le firme dei
+blocchi e il nome logico del wallet, ma cambia l'archiviazione: database/sidecar,
+conferma backup e journal dei pagamenti sotto la directory privata no_backup.
+Rifiuta database o preferenze legacy; nessuna migrazione, reset o sostituzione.
+
+SDK0.7.5/JNI e 53 dipendenze invariati, minSdk29. Non richiede modifiche al server
+MIT o nuovi permessi. La collocazione e il backup effettivo devono ancora essere
+verificati sul telefono; non copre tutti i file SDK/app o ogni trasferimento OEM.
+
+Nuovi blocchi: GetStorageStatus() → StorageStatus(report), JSON senza percorsi
+personali o segreti. Leggere [NO-BACKUP-TEST.md](NO-BACKUP-TEST.md) prima della prova.
+Protocollo e fonti in ../docs/NO-BACKUP-CANDIDATE-DESIGN.md e
+../docs/NO-BACKUP-STORAGE-STUDY.md. Esiti automatici in VALIDATION.md;
+collaudo precedente conservato in history/VALIDATION-0.0.10.md.
 
 ## Ripristino aggiunto nella 0.0.10
 
@@ -20,8 +31,8 @@ e rifiuto della frase incompleta, del checksum errato, della parola fuori
 dizionario e della password troppo corta. Verificati anche riapertura dopo
 background e invio dei fondi recuperati, ricevuti dal destinatario e poi CONFIRMED.
 La tempistica del background durante il recupero non è stata accertata.
-Riepilogo aggiornato al 2026-11-13 in
-[VALIDATION.md](VALIDATION.md), con verifiche automatiche e casi ancora aperti.
+Riepilogo della baseline aggiornato al 2026-11-13 in
+[history/VALIDATION-0.0.10.md](history/VALIDATION-0.0.10.md), con verifiche automatiche e casi ancora aperti.
 Verificata anche la ritrasmissione in attesa di conferma: stesso idem, un solo
 movimento al destinatario e successivo CONFIRMED; ALREADY_CONFIRMED su pagamento
 già confermato. Guida ai blocchi: [APP-INVENTOR-GUIDE.md](APP-INVENTOR-GUIDE.md).
@@ -49,8 +60,8 @@ Gli errori passano attraverso `WalletFailed(operation,code,message)`.
 
 ## Prova sul telefono
 
-1. Importare il nuovo AIX nel progetto già funzionante, compilare l'APK e
-   aggiornarlo senza disinstallare o cancellare i dati. Per questa prova usare
+1. Importare il nuovo AIX in un progetto separato senza wallet precedente,
+   compilare e installare un APK distinto senza toccare l’app principale. Per questa prova usare
    un wallet testnet con fondi di prova e backup verificato.
 2. Verificare `LibNexaVersion = 0.7.5`, aprire il wallet e attendere saldo
    sincronizzato e connessione. Sono utilizzabili solo input con almeno una
@@ -90,8 +101,8 @@ consegna all'SDK. `LOCAL_UNCONFIRMED`: storia locale senza conferma.
 Un solo pagamento irrisolto blocca nuovi pagamenti (`SEND_PENDING`), anche dopo
 riavvio. Non si sblocca automaticamente se respinto o rimosso; serve diagnosi.
 Nessun blocco cancella una transazione già approvata o aumenta la commissione.
-Il journal contiene byte firmati e metadati pubblici in preferenze private
-Android, senza password, seed o chiavi private. Il checksum rileva corruzione
+Il journal contiene byte firmati e metadati pubblici nel file privato sotto
+no_backup, senza password, seed o chiavi private. Il checksum rileva corruzione
 accidentale, non un attaccante con accesso al processo.
 
 Prima del consenso, annullamento, scadenza dopo due minuti o background rilasciano
@@ -133,10 +144,11 @@ Con una directory runtime già preparata:
 python3 tools/restore_deps.py /percorso/dipendenze-congelate
 tools/test_wallet_session.sh
 python3 tools/test_recovery_sdk.py
+JSON_JAR=/percorso/appinventor/lib/json/json.jar bash tools/test_no_backup_store.sh
 rush build
 python3 tools/compat_aix.py
-python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.10.aix \
-  --baseline-aix ../dist/NexaPackagingProbe-0.0.9.aix \
+python3 tools/inspect_aix.py out/NexaPackagingProbe-0.0.11.aix \
+  --baseline-aix ../dist/NexaPackagingProbe-0.0.10.aix \
   --jni-aar deps/libnexajni-release.aar
 ```
 

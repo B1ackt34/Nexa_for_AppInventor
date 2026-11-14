@@ -1,5 +1,18 @@
 # NexaPackagingProbe — artefatti
 
+## Candidata testnet 0.0.11 — storage no_backup
+
+**Solo progetto/package separato senza wallet precedente. Non aggiornare l’app principale.**
+Database wallet e metadati vengono indirizzati a noBackupFilesDir; nessuna migrazione,
+reset o sostituzione dei dati legacy. La 0.0.10 resta la baseline collaudata.
+File: NexaPackagingProbe-0.0.11.aix e ZIP omonimo. SDK0.7.5 invariato.
+145 test superati (102 controller, 36 file/journal, 7 validatore), build/packaging
+verificati. Percorsi reali, backup cloud e trasferimento OEM restano da collaudare.
+Nuovi blocchi GetStorageStatus e StorageStatus(report), senza segreti o percorsi
+personali. Prima prova: [NO-BACKUP-TEST.md](../wallet-extension/NO-BACKUP-TEST.md).
+Guide aggiornate: [italiano](../wallet-extension/APP-INVENTOR-GUIDE.md) /
+[English](../wallet-extension/APP-INVENTOR-GUIDE.en.md).
+
 ## Baseline funzionale testnet 0.0.10 — ripristino da frase
 
 File: NexaPackagingProbe-0.0.10.aix, disponibile anche nello ZIP omonimo.
@@ -12,7 +25,7 @@ e rifiuto di frase incompleta, checksum errato, parola fuori dizionario e passwo
 troppo corta. Verificati riapertura dopo background e invio dei fondi recuperati,
 ricevuti e successivamente CONFIRMED. Background durante il recupero non accertato.
 Riepilogo al 2026-11-13 in
-[VALIDATION.md](../wallet-extension/VALIDATION.md).
+[collaudo 0.0.10](../wallet-extension/history/VALIDATION-0.0.10.md).
 Ritrasmissione manuale verificata con idem invariato, un solo movimento ricevuto
 e successivo CONFIRMED; rifiuto ALREADY_CONFIRMED sul pagamento già confermato.
 Guida: [blocchi App Inventor](../wallet-extension/APP-INVENTOR-GUIDE.md).

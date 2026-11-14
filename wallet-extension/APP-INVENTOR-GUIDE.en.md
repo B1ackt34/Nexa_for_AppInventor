@@ -1,13 +1,22 @@
-# Using NexaPackagingProbe 0.0.10 in App Inventor
+# Using NexaPackagingProbe 0.0.11 in App Inventor
 
 [Versione italiana](APP-INVENTOR-GUIDE.md)
 
-Functional NEXATESTNET baseline, Android 10/API29 or later. Import the .aix file
+NEXATESTNET candidate, Android 10/API29 or later. The validated baseline remains
+0.0.10. **Use 0.0.11 in a separate testnet app without a previous wallet**:
+it does not migrate data and rejects legacy storage with LEGACY_STORAGE_FOUND.
+Procedure: [NO-BACKUP-TEST.md](NO-BACKUP-TEST.md) (currently in Italian).
+
+Wallet database and metadata target noBackupFilesDir; verify the actual location
+on the phone using GetStorageStatus. Cloud backup and D2D have not yet been
+tested, and other SDK/app data is outside the scope of this change.
+
+ Import the .aix file
 as an extension and add the non-visible component to the wallet Form. The
 component name remains NexaPackagingProbe. LibNexaVersion reports the SDK
-version (0.7.5), not the extension version (0.0.10).
+version (0.7.5), not the extension version (0.0.11).
 
-This guide describes the blocks actually available in 0.0.10. Signatures and
+This guide describes the blocks actually available in 0.0.11. Signatures and
 conditions come from src/org/nexa/appinventor/probe/NexaPackagingProbe.java and
 WalletSession.java. Sources for the underlying Nexa APIs are listed in the
 README and ../docs/RESTORE-WALLET-DESIGN.md. Test results and limitations are
@@ -33,6 +42,7 @@ rather than assuming the wallet is ready when the function call block finishes.
 | CancelFastSync() | Terminal result through FastSyncFinished or WalletFailed | Cooperative cancellation, not immediate termination. |
 | SendNexa(address,amountNexa,maxFeeNexa,passphrase) | SendNexaPrepared(requestId,address,amount,fee,total), then SendNexaSubmitted(idem) or SendNexaCancelled(requestId,reason) | Prepare, show an Android dialog and hand off to the SDK only after confirmation. |
 | CancelSendNexa() | SendNexaCancelled(requestId,reason), if a preview exists | Cancel before confirmation; does not cancel an approved payment. |
+| GetStorageStatus() | StorageStatus(report) | JSON with file roles and expected locations, without personal paths or secrets; does not prove actual backup behavior. |
 | GetLastSendStatus() | SendNexaStatus(idem,state,confirmedHeight) | Read the last approved payment for this installation. |
 | RetryLastSendNexa() | Preview/dialog and the same send events | Confirm retransmission of the exact bytes already approved. |
 
@@ -68,13 +78,24 @@ authorization. Only the button in the native dialog authorizes the transaction.
 Expiry after two minutes, cancellation or backgrounding before consent does
 not authorize payment. After consent, do not promise cancellation.
 
+## Storage diagnostics
+
+GetStorageStatus can be called without opening the wallet. In StorageStatus,
+report is a JSON string. Before creation, databaseExists/metadataExists are
+false; after successful creation they should be true, with both insideNoBackup
+flags true, legacyArtifactsFound false and layout CONSISTENT. Sidecars may be
+absent; insideNoBackup for an absent file describes its expected location.
+deviceBackupRestoreTested and oemTransferVerified remain false because this call
+does not perform backups or transfers. Observations are not an atomic snapshot.
+The report does not guarantee durability after a sync failure.
+
 ## Read-only properties
 
 | Property | Meaning |
 | --- | --- |
 | Initialized | Native initialization has completed in this process. |
 | LibNexaVersion | Bundled SDK: 0.7.5. |
-| Network | testnet; no mainnet selection in 0.0.10. |
+| Network | testnet; no mainnet selection in 0.0.11. |
 | WalletOpen | Session is open and not revoked; does not certify synchronization or connectivity. |
 | FastSyncRunning | A FastSync attempt is still in progress, including after cancellation has been requested. |
 | SendInProgress | Current preparation, preview or SDK call; use GetLastSendStatus for an earlier unresolved payment. |
@@ -115,6 +136,8 @@ app's journal.
 | INVALID_RECOVERY_PHRASE | Privately check the 12 words; do not include them in reports. |
 | BACKUP_REQUIRED | Complete the backup and call ConfirmBackup. |
 | BACKUP_ALREADY_CONFIRMED | ShowRecoveryPhrase is no longer available after initial confirmation. |
+| LEGACY_STORAGE_FOUND | Keep the old app on 0.0.10 and use a separate project/package for this candidate; do not clear its data. |
+| STORAGE_INCOMPLETE / STORAGE_METADATA_INVALID / STORAGE_PATH_INVALID / STORAGE_WRITE_UNCONFIRMED | Preserve data and diagnose; do not reset, manually copy the database or create new payments. |
 | WALLET_EXISTS | Use OpenWallet; do not attempt restoration over the database. |
 | WALLET_NOT_FOUND | Check that the correct app is running; explicitly choose creation/restoration without automatic deletion. |
 | WRONG_NETWORK | Use a NEXATESTNET destination. |

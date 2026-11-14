@@ -1,13 +1,22 @@
-# Usare NexaPackagingProbe 0.0.10 in App Inventor
+# Usare NexaPackagingProbe 0.0.11 in App Inventor
 
 [English version](APP-INVENTOR-GUIDE.en.md)
 
-Baseline funzionale NEXATESTNET, Android 10/API29 o superiore. Importare il file
+Candidata NEXATESTNET, Android 10/API29 o superiore. La baseline collaudata resta
+0.0.10. **Usare la 0.0.11 in un'app testnet separata senza wallet precedente**:
+non migra i dati e rifiuta lo storage legacy con LEGACY_STORAGE_FOUND.
+Procedura: [NO-BACKUP-TEST.md](NO-BACKUP-TEST.md).
+
+Database wallet e metadati sono indirizzati a noBackupFilesDir; la collocazione
+reale va verificata sul telefono con GetStorageStatus. Backup cloud e D2D non
+sono ancora collaudati e gli altri dati SDK/app non sono coperti.
+
+ Importare il file
 .aix come estensione e aggiungere il componente non visibile alla Form del
 wallet. Il nome del componente rimane NexaPackagingProbe. LibNexaVersion indica
-la versione SDK (0.7.5), non la versione dell'estensione (0.0.10).
+la versione SDK (0.7.5), non la versione dell'estensione (0.0.11).
 
-La guida descrive i blocchi realmente presenti nella 0.0.10. Firme e condizioni
+La guida descrive i blocchi realmente presenti nella 0.0.11. Firme e condizioni
 sono ricavate da src/org/nexa/appinventor/probe/NexaPackagingProbe.java e
 WalletSession.java. Fonti delle API Nexa sottostanti nel README e in
 ../docs/RESTORE-WALLET-DESIGN.md. Collaudo e limiti in VALIDATION.md.
@@ -32,6 +41,7 @@ non presumere che il wallet sia pronto appena termina il blocco di chiamata.
 | CancelFastSync() | Esito terminale tramite FastSyncFinished o WalletFailed | Cancellazione cooperativa, non immediata. |
 | SendNexa(address,amountNexa,maxFeeNexa,passphrase) | SendNexaPrepared(requestId,address,amount,fee,total), poi SendNexaSubmitted(idem) o SendNexaCancelled(requestId,reason) | Preparazione, dialogo Android e consegna all'SDK solo dopo conferma. |
 | CancelSendNexa() | SendNexaCancelled(requestId,reason), se esiste una bozza | Annullare prima della conferma; non annulla un pagamento approvato. |
+| GetStorageStatus() | StorageStatus(report) | JSON con ruoli e collocazione prevista dei file, senza percorsi personali o segreti; non prova il backup reale. |
 | GetLastSendStatus() | SendNexaStatus(idem,state,confirmedHeight) | Leggere l'ultimo pagamento approvato di questa installazione. |
 | RetryLastSendNexa() | Anteprima/dialogo e stessi eventi di invio | Confermare la ritrasmissione degli stessi byte già approvati. |
 
@@ -67,13 +77,24 @@ il pagamento. Solo il pulsante nel dialogo nativo autorizza la transazione.
 Conferma scaduta dopo due minuti, annullamento o background prima del consenso
 non autorizzano il pagamento. Dopo il consenso non promettere annullamento.
 
+## Diagnostica dello storage
+
+GetStorageStatus può essere chiamato senza aprire il wallet. In StorageStatus,
+report è un testo JSON. Prima della creazione databaseExists/metadataExists
+sono false; dopo creazione riuscita devono essere true, con entrambi gli
+insideNoBackup true, legacyArtifactsFound false e layout CONSISTENT. I sidecar
+possono essere assenti; insideNoBackup per un file assente descrive il percorso
+previsto. deviceBackupRestoreTested e oemTransferVerified restano false perché
+questa chiamata non esegue backup né trasferimento. Le osservazioni non sono
+uno snapshot atomico. Lo stato non garantisce durabilità dopo un errore di sync.
+
 ## Proprietà di lettura
 
 | Proprietà | Significato |
 | --- | --- |
 | Initialized | Inizializzazione nativa completata nel processo. |
 | LibNexaVersion | SDK incluso: 0.7.5. |
-| Network | testnet; nessuna selezione mainnet nella 0.0.10. |
+| Network | testnet; nessuna selezione mainnet nella 0.0.11. |
 | WalletOpen | Sessione aperta e non revocata; non certifica sync o connessione. |
 | FastSyncRunning | Tentativo FastSync ancora in corso, anche se è stata richiesta la cancellazione. |
 | SendInProgress | Preparazione, anteprima o chiamata SDK corrente; per un pagamento irrisolto precedente usare GetLastSendStatus. |
@@ -113,6 +134,8 @@ o dispositivi. Il ripristino da frase non ricrea il journal dell'app precedente.
 | INVALID_RECOVERY_PHRASE | Controllare privatamente le 12 parole; non includerle nei report. |
 | BACKUP_REQUIRED | Completare il backup e chiamare ConfirmBackup. |
 | BACKUP_ALREADY_CONFIRMED | ShowRecoveryPhrase non è più disponibile dopo la conferma iniziale. |
+| LEGACY_STORAGE_FOUND | Mantenere la vecchia app con la 0.0.10 e usare un progetto/package separato per la candidata; non cancellare i dati. |
+| STORAGE_INCOMPLETE / STORAGE_METADATA_INVALID / STORAGE_PATH_INVALID / STORAGE_WRITE_UNCONFIRMED | Conservare i dati e diagnosticare, senza reset, copia manuale del database o nuovi pagamenti. |
 | WALLET_EXISTS | Usare OpenWallet, non tentare un ripristino sopra il database. |
 | WALLET_NOT_FOUND | Verificare di essere nell'app corretta; scegliere esplicitamente crea/ripristina senza cancellazioni automatiche. |
 | WRONG_NETWORK | Usare un destinatario NEXATESTNET. |

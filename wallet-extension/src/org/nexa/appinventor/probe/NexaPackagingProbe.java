@@ -26,7 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 /** Experimental testnet wallet. Testnet only. Payments require a native confirmation dialog. */
 @Extension(description = "Experimental Nexa testnet wallet with manual Electrum fast sync.")
-@DesignerComponent(version = 10, description = "Experimental Nexa testnet wallet",
+@DesignerComponent(version = 11, description = "Experimental Nexa testnet wallet",
     category = ComponentCategory.EXTENSION, nonVisible = true, androidMinSdk = 29)
 @SimpleObject(external = true)
 public final class NexaPackagingProbe extends AndroidNonvisibleComponent implements OnPauseListener, OnStopListener, OnResumeListener {
@@ -354,6 +354,17 @@ public final class NexaPackagingProbe extends AndroidNonvisibleComponent impleme
       post(request.token, () -> WalletCreated(phrase));
     });
   }
+
+  @SimpleFunction(description = "Inspect wallet storage paths by role only, without opening the wallet or returning paths/secrets. Does not prove actual cloud backup or OEM transfer behavior.")
+  public void GetStorageStatus() {
+    walletOperation("GetStorageStatus", request -> {
+      String report = NexaWalletStorage.storageStatus(applicationContext);
+      post(request.token, () -> StorageStatus(report));
+    });
+  }
+
+  @SimpleEvent(description = "JSON storage location report. No secrets or personal paths. Scope is wallet database and app metadata, not all SDK/app files.")
+  public void StorageStatus(String report) { EventDispatcher.dispatchEvent(this, "StorageStatus", report); }
 
   @SimpleFunction(description = "Restore a 12-word English testnet recovery phrase into an absent wallet only. Passphrase is the new local encryption password (12+ characters). Rejects existing wallet data. WalletRestored does not imply synchronized funds. Never log or persist the input phrase in App Inventor.")
   public void RestoreWallet(String recoveryPhrase, String passphrase) {
